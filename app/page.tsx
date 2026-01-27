@@ -406,6 +406,8 @@ export default function Home() {
           className="hero-bg"
         />
         <div className="hero-overlay" />
+        <div className="hero-ornament orb-1" />
+        <div className="hero-ornament orb-2" />
         <header className="topbar">
           <div className="topbar-inner">
             <div className="brand">
@@ -417,7 +419,7 @@ export default function Home() {
             </Link>
           </div>
         </header>
-        <div className="hero-headline">
+        <div className="hero-headline fade-in">
           <p className="badge badge-new">Cocina italiana & fusión</p>
           <h1>La carta, reinventada para pedir desde la mesa</h1>
           <p>
@@ -440,7 +442,7 @@ export default function Home() {
 
         <section className="layout">
           <div>
-            <div className="table-card">
+            <div className="table-card fade-in">
               <div>
                 <p className="badge badge-new">Paso 1</p>
                 <h3>Ingresa tu mesa</h3>
@@ -475,7 +477,7 @@ export default function Home() {
               ))}
             </div>
 
-            <div className="menu-grid">
+            <div className="menu-grid stagger">
               {visibleMenu.map((item) => (
                 <div key={item.id} className="menu-card">
                   <div className="menu-thumb">
