@@ -1,209 +1,23 @@
 ﻿"use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { hasSupabaseConfig, supabase } from "@/lib/supabaseClient";
 
-const MENU = [
-  // Pane e pierina
-  {
-    id: "ent-1",
-    name: "Surtido de focaccias",
-    description: "Aceite, cebolla, aceitunas y tomate.",
-    price: 4.85,
-    category: "Entrantes",
-  },
-  {
-    id: "ent-2",
-    name: "Pierina Parmigiana",
-    description: "Base de pizza con queso parmigiano.",
-    price: 5.15,
-    category: "Entrantes",
-  },
-  {
-    id: "ent-3",
-    name: "Pierina Tartufata",
-    description: "Base de pizza con trufa negra.",
-    price: 5.55,
-    category: "Entrantes",
-  },
-  // Entrantes fríos/calientes
-  {
-    id: "ent-4",
-    name: "Croquetas de la abuela",
-    description: "Jamón ibérico y pollo asado (8 uds).",
-    price: 11.85,
-    category: "Entrantes",
-  },
-  {
-    id: "ent-5",
-    name: "Carpaccio de ternera",
-    description: "Solomillo, limón, AOVE y parmigiano 24M.",
-    price: 17.75,
-    category: "Entrantes",
-  },
-  {
-    id: "ent-6",
-    name: "Burrata della Puglia",
-    description: "Mermelada de tomate, pesto, rúcula y piñones.",
-    price: 14.55,
-    category: "Entrantes",
-  },
-  // Ensaladas
-  {
-    id: "ens-1",
-    name: "Giulietta",
-    description: "Lechugas, tomate, cecina, beicon y rulo de cabra.",
-    price: 14.55,
-    category: "Ensaladas",
-  },
-  {
-    id: "ens-2",
-    name: "Paese",
-    description: "Lechugas, pistachos, rulo de cabra, manzana y nueces.",
-    price: 14.55,
-    category: "Ensaladas",
-  },
-  {
-    id: "ens-3",
-    name: "Pollo crocante",
-    description: "Lechugas, pollo crujiente, pimiento asado y aguacate.",
-    price: 14.55,
-    category: "Ensaladas",
-  },
-  // Gratinados
-  {
-    id: "gra-1",
-    name: "Gran cannelloni",
-    description: "Asado tradicional, bechamel y parmigiano.",
-    price: 18.6,
-    category: "Gratinados",
-  },
-  {
-    id: "gra-2",
-    name: "Cannelloni di mare",
-    description: "Brandada de bacalao y gambas, bechamel de piquillo.",
-    price: 18.1,
-    category: "Gratinados",
-  },
-  {
-    id: "gra-3",
-    name: "Lasagna a la Bolognese",
-    description: "Cinco láminas con boloñesa, bechamel y parmigiano.",
-    price: 18.95,
-    category: "Gratinados",
-  },
-  // Pizzas clásicas
-  {
-    id: "piz-1",
-    name: "Prosciutto",
-    description: "Tomate, mozzarella y jamón de York.",
-    price: 16.35,
-    category: "Pizzas",
-  },
-  {
-    id: "piz-2",
-    name: "Pepperoni",
-    description: "Tomate, mozzarella, pepperoni y beicon crujiente.",
-    price: 16.55,
-    category: "Pizzas",
-  },
-  {
-    id: "piz-3",
-    name: "Quattro stagioni",
-    description: "Tomate, mozzarella, jamón, champiñones, atún y alcachofas.",
-    price: 16.75,
-    category: "Pizzas",
-  },
-  // Pizzas especiales
-  {
-    id: "piz-4",
-    name: "Piemontesa",
-    description: "Tomate, burrata, carpaccio y rúcula.",
-    price: 17.05,
-    category: "Pizzas",
-  },
-  {
-    id: "piz-5",
-    name: "Parmigiana",
-    description: "Tomate, mozzarella, beicon, scamorza y parmigiano.",
-    price: 16.75,
-    category: "Pizzas",
-  },
-  {
-    id: "piz-6",
-    name: "Diavola",
-    description: "Base de ternera, pepperoni, longaniza y guindilla.",
-    price: 16.75,
-    category: "Pizzas",
-  },
-  // Pastas (selección)
-  {
-    id: "pas-1",
-    name: "Tagliatelle Ligurian",
-    description: "Pesto a la crema con beicon y parmigiano.",
-    price: 14.6,
-    category: "Pastas",
-  },
-  {
-    id: "pas-2",
-    name: "Tagliatelle Trufa y hongos",
-    description: "Crema de funghi porcini y trufa con setas.",
-    price: 14.6,
-    category: "Pastas",
-  },
-  {
-    id: "pas-3",
-    name: "Tagliatelle Carbonara",
-    description: "Carbonara clásica “al mio modo”.",
-    price: 14.6,
-    category: "Pastas",
-  },
-  // Carnes
-  {
-    id: "car-1",
-    name: "Pollo al horno",
-    description: "Medio pollo en su jugo, patatas fritas y salsa mesone.",
-    price: 17.35,
-    category: "Carnes",
-  },
-  {
-    id: "car-2",
-    name: "Maxi burguer Angus",
-    description: "Foie, beicon, scamorza y cebolla caramelizada.",
-    price: 20.05,
-    category: "Carnes",
-  },
-  {
-    id: "car-3",
-    name: "Entrecot Angus (parrilla)",
-    description: "Con guarnición; opción salsas aparte.",
-    price: 25.05,
-    category: "Carnes",
-  },
-  // Bebidas (vinos y sangrías)
-  {
-    id: "beb-1",
-    name: "Lambrusco Rosso",
-    description: "IGT Reggio Emilia · espumoso tinto.",
-    price: 13.95,
-    category: "Bebidas",
-  },
-  {
-    id: "beb-2",
-    name: "Copa de vino de la casa",
-    description: "Tinto, rosado o blanco.",
-    price: 3.25,
-    category: "Bebidas",
-  },
-  {
-    id: "beb-3",
-    name: "Sangría de vino (1L)",
-    description: "Receta de la casa.",
-    price: 16.95,
-    category: "Bebidas",
-  },
-];
+type CartLine = {
+  id: string;
+  qty: number;
+};
+
+type MenuItem = {
+  id: string;
+  name: string;
+  description: string;
+  price: number;
+  category: (typeof CATEGORIES)[number];
+  image: string;
+};
 
 const CATEGORIES = [
   "Entrantes",
@@ -215,10 +29,260 @@ const CATEGORIES = [
   "Bebidas",
 ] as const;
 
-type CartLine = {
-  id: string;
-  qty: number;
-};
+const MENU: MenuItem[] = [
+  // Pane e pierina
+  {
+    id: "ent-1",
+    name: "Surtido de focaccias",
+    description: "Aceite, cebolla, aceitunas y tomate.",
+    price: 4.85,
+    category: "Entrantes",
+    image:
+      "https://images.unsplash.com/photo-1604908178068-2c87c34a9b22?auto=format&fit=crop&w=800&q=80",
+  },
+  {
+    id: "ent-2",
+    name: "Pierina Parmigiana",
+    description: "Base de pizza con queso parmigiano.",
+    price: 5.15,
+    category: "Entrantes",
+    image:
+      "https://images.unsplash.com/photo-1604908178068-16c7d98ae035?auto=format&fit=crop&w=800&q=80",
+  },
+  {
+    id: "ent-3",
+    name: "Pierina Tartufata",
+    description: "Base de pizza con trufa negra.",
+    price: 5.55,
+    category: "Entrantes",
+    image:
+      "https://images.unsplash.com/photo-1504674900247-0877df9cc836?auto=format&fit=crop&w=800&q=80",
+  },
+  // Entrantes fríos/calientes
+  {
+    id: "ent-4",
+    name: "Croquetas de la abuela",
+    description: "Jamón ibérico y pollo asado (8 uds).",
+    price: 11.85,
+    category: "Entrantes",
+    image:
+      "https://images.unsplash.com/photo-1604908177683-2b7d94c6db1c?auto=format&fit=crop&w=800&q=80",
+  },
+  {
+    id: "ent-5",
+    name: "Carpaccio de ternera",
+    description: "Solomillo, limón, AOVE y parmigiano 24M.",
+    price: 17.75,
+    category: "Entrantes",
+    image:
+      "https://images.unsplash.com/photo-1466637574441-749b8f19452f?auto=format&fit=crop&w=800&q=80",
+  },
+  {
+    id: "ent-6",
+    name: "Burrata della Puglia",
+    description: "Mermelada de tomate, pesto, rúcula y piñones.",
+    price: 14.55,
+    category: "Entrantes",
+    image:
+      "https://images.unsplash.com/photo-1551024601-bec78aea704b?auto=format&fit=crop&w=800&q=80",
+  },
+  // Ensaladas
+  {
+    id: "ens-1",
+    name: "Giulietta",
+    description: "Lechugas, tomate, cecina, beicon y rulo de cabra.",
+    price: 14.55,
+    category: "Ensaladas",
+    image:
+      "https://images.unsplash.com/photo-1512621776951-a57141f2eefd?auto=format&fit=crop&w=800&q=80",
+  },
+  {
+    id: "ens-2",
+    name: "Paese",
+    description: "Lechugas, pistachos, rulo de cabra, manzana y nueces.",
+    price: 14.55,
+    category: "Ensaladas",
+    image:
+      "https://images.unsplash.com/photo-1528715471579-d1bcf0ba5e83?auto=format&fit=crop&w=800&q=80",
+  },
+  {
+    id: "ens-3",
+    name: "Pollo crocante",
+    description: "Lechugas, pollo crujiente, pimiento asado y aguacate.",
+    price: 14.55,
+    category: "Ensaladas",
+    image:
+      "https://images.unsplash.com/photo-1504674900247-0877df9cc836?auto=format&fit=crop&w=800&q=80",
+  },
+  // Gratinados
+  {
+    id: "gra-1",
+    name: "Gran cannelloni",
+    description: "Asado tradicional, bechamel y parmigiano.",
+    price: 18.6,
+    category: "Gratinados",
+    image:
+      "https://images.unsplash.com/photo-1467003909585-2f8a72700288?auto=format&fit=crop&w=800&q=80",
+  },
+  {
+    id: "gra-2",
+    name: "Cannelloni di mare",
+    description: "Brandada de bacalao y gambas, bechamel de piquillo.",
+    price: 18.1,
+    category: "Gratinados",
+    image:
+      "https://images.unsplash.com/photo-1473093295043-cdd812d0e601?auto=format&fit=crop&w=800&q=80",
+  },
+  {
+    id: "gra-3",
+    name: "Lasagna a la Bolognese",
+    description: "Cinco láminas con boloñesa, bechamel y parmigiano.",
+    price: 18.95,
+    category: "Gratinados",
+    image:
+      "https://images.unsplash.com/photo-1540189549336-e6e99c3679fe?auto=format&fit=crop&w=800&q=80",
+  },
+  // Pizzas clásicas
+  {
+    id: "piz-1",
+    name: "Prosciutto",
+    description: "Tomate, mozzarella y jamón de York.",
+    price: 16.35,
+    category: "Pizzas",
+    image:
+      "https://images.unsplash.com/photo-1548365328-5473d2fb5650?auto=format&fit=crop&w=800&q=80",
+  },
+  {
+    id: "piz-2",
+    name: "Pepperoni",
+    description: "Tomate, mozzarella, pepperoni y beicon crujiente.",
+    price: 16.55,
+    category: "Pizzas",
+    image:
+      "https://images.unsplash.com/photo-1506354666786-959d6d497f1a?auto=format&fit=crop&w=800&q=80",
+  },
+  {
+    id: "piz-3",
+    name: "Quattro stagioni",
+    description: "Tomate, mozzarella, jamón, champiñones, atún y alcachofas.",
+    price: 16.75,
+    category: "Pizzas",
+    image:
+      "https://images.unsplash.com/photo-1513104890138-7c749659a591?auto=format&fit=crop&w=800&q=80",
+  },
+  // Pizzas especiales
+  {
+    id: "piz-4",
+    name: "Piemontesa",
+    description: "Tomate, burrata, carpaccio y rúcula.",
+    price: 17.05,
+    category: "Pizzas",
+    image:
+      "https://images.unsplash.com/photo-1604908177520-4025a3f02c8b?auto=format&fit=crop&w=800&q=80",
+  },
+  {
+    id: "piz-5",
+    name: "Parmigiana",
+    description: "Tomate, mozzarella, beicon, scamorza y parmigiano.",
+    price: 16.75,
+    category: "Pizzas",
+    image:
+      "https://images.unsplash.com/photo-1528735602780-2552fd46c7af?auto=format&fit=crop&w=800&q=80",
+  },
+  {
+    id: "piz-6",
+    name: "Diavola",
+    description: "Base de ternera, pepperoni, longaniza y guindilla.",
+    price: 16.75,
+    category: "Pizzas",
+    image:
+      "https://images.unsplash.com/photo-1542281286-9e0a16bb7366?auto=format&fit=crop&w=800&q=80",
+  },
+  // Pastas (selección)
+  {
+    id: "pas-1",
+    name: "Tagliatelle Ligurian",
+    description: "Pesto a la crema con beicon y parmigiano.",
+    price: 14.6,
+    category: "Pastas",
+    image:
+      "https://images.unsplash.com/photo-1504674900247-0877df9cc836?auto=format&fit=crop&w=800&q=80",
+  },
+  {
+    id: "pas-2",
+    name: "Tagliatelle Trufa y hongos",
+    description: "Crema de funghi porcini y trufa con setas.",
+    price: 14.6,
+    category: "Pastas",
+    image:
+      "https://images.unsplash.com/photo-1504674900247-08da8d7b2f7f?auto=format&fit=crop&w=800&q=80",
+  },
+  {
+    id: "pas-3",
+    name: "Tagliatelle Carbonara",
+    description: "Carbonara clásica “al mio modo”.",
+    price: 14.6,
+    category: "Pastas",
+    image:
+      "https://images.unsplash.com/photo-1504674900247-c03fd06b7f80?auto=format&fit=crop&w=800&q=80",
+  },
+  // Carnes
+  {
+    id: "car-1",
+    name: "Pollo al horno",
+    description: "Medio pollo en su jugo, patatas fritas y salsa mesone.",
+    price: 17.35,
+    category: "Carnes",
+    image:
+      "https://images.unsplash.com/photo-1604908177248-29f1ba5e4cb6?auto=format&fit=crop&w=800&q=80",
+  },
+  {
+    id: "car-2",
+    name: "Maxi burguer Angus",
+    description: "Foie, beicon, scamorza y cebolla caramelizada.",
+    price: 20.05,
+    category: "Carnes",
+    image:
+      "https://images.unsplash.com/photo-1550547660-d9450f859349?auto=format&fit=crop&w=800&q=80",
+  },
+  {
+    id: "car-3",
+    name: "Entrecot Angus (parrilla)",
+    description: "Con guarnición; opción salsas aparte.",
+    price: 25.05,
+    category: "Carnes",
+    image:
+      "https://images.unsplash.com/photo-1559057194-55dc0ad3f207?auto=format&fit=crop&w=800&q=80",
+  },
+  // Bebidas (vinos y sangrías)
+  {
+    id: "beb-1",
+    name: "Lambrusco Rosso",
+    description: "IGT Reggio Emilia · espumoso tinto.",
+    price: 13.95,
+    category: "Bebidas",
+    image:
+      "https://images.unsplash.com/photo-1514361892635-6e122620e4d1?auto=format&fit=crop&w=800&q=80",
+  },
+  {
+    id: "beb-2",
+    name: "Copa de vino de la casa",
+    description: "Tinto, rosado o blanco.",
+    price: 3.25,
+    category: "Bebidas",
+    image:
+      "https://images.unsplash.com/photo-1510626176961-4b37d0b4e904?auto=format&fit=crop&w=800&q=80",
+  },
+  {
+    id: "beb-3",
+    name: "Sangría de vino (1L)",
+    description: "Receta de la casa.",
+    price: 16.95,
+    category: "Bebidas",
+    image:
+      "https://images.unsplash.com/photo-1504674900247-487aa01e1e48?auto=format&fit=crop&w=800&q=80",
+  },
+];
 
 const formatCurrency = (value: number) =>
   new Intl.NumberFormat("es-ES", {
@@ -333,17 +397,35 @@ export default function Home() {
 
   return (
     <div className="page">
-      <header className="topbar">
-        <div className="topbar-inner">
-          <div className="brand">
-            <div className="brand-mark">Menu Lungo</div>
-            <div className="brand-sub">Cucina contemporánea</div>
+      <div className="hero-visual">
+        <Image
+          src="https://images.unsplash.com/photo-1604908177520-4025a3f02c8b?auto=format&fit=crop&w=1400&q=80"
+          alt="Mesa con pizza y vino"
+          fill
+          priority
+          className="hero-bg"
+        />
+        <div className="hero-overlay" />
+        <header className="topbar">
+          <div className="topbar-inner">
+            <div className="brand">
+              <div className="brand-mark">Menu Lungo</div>
+              <div className="brand-sub">Cucina contemporánea</div>
+            </div>
+            <Link className="nav-link" href="/admin">
+              Abrir cocina
+            </Link>
           </div>
-          <Link className="nav-link" href="/admin">
-            Abrir cocina
-          </Link>
+        </header>
+        <div className="hero-headline">
+          <p className="badge badge-new">Cocina italiana & fusión</p>
+          <h1>La carta, reinventada para pedir desde la mesa</h1>
+          <p>
+            Inspirada en la experiencia de La Piemontesa: masa fina, pastas de
+            obrador y brasas lentas. Mira cada plato antes de pedirlo.
+          </p>
         </div>
-      </header>
+      </div>
 
       <main className="container">
         {!hasSupabaseConfig ? (
@@ -355,47 +437,30 @@ export default function Home() {
             </p>
           </div>
         ) : null}
-        <section className="hero">
-          <div className="hero-card">
-            <h1 className="hero-title">Haz tu pedido desde la mesa</h1>
-            <p className="hero-copy">
-              Selecciona tu número de mesa y explora el menú del día. Tu pedido
-              llegará directo a la cocina en segundos.
-            </p>
-            <div className="table-input">
-              <label htmlFor="table">Número de mesa</label>
-              <input
-                id="table"
-                className="input"
-                placeholder="Ej. 12"
-                value={table}
-                onChange={(event) => setTable(event.target.value)}
-              />
-            </div>
-          </div>
-          <div className="hero-card">
-            <h2 className="section-title">Especial de la casa</h2>
-            <p className="hero-copy">
-              Pizza Diavola dorada + Spritz Lungo + Tiramisú clásico.
-            </p>
-            <div style={{ marginTop: 18 }}>
-              <button
-                className="btn btn-primary"
-                onClick={() => {
-                  addToCart("piz-2");
-                  addToCart("beb-1");
-                  addToCart("pos-1");
-                }}
-              >
-                Agregar combo
-              </button>
-            </div>
-          </div>
-        </section>
 
         <section className="layout">
           <div>
-            <h3 className="section-title">Categorías</h3>
+            <div className="table-card">
+              <div>
+                <p className="badge badge-new">Paso 1</p>
+                <h3>Ingresa tu mesa</h3>
+                <p>Y navega por categorías con fotos de cada plato.</p>
+              </div>
+              <div className="table-input" style={{ marginTop: 12 }}>
+                <label htmlFor="table">Número de mesa</label>
+                <input
+                  id="table"
+                  className="input"
+                  placeholder="Ej. 12"
+                  value={table}
+                  onChange={(event) => setTable(event.target.value)}
+                />
+              </div>
+            </div>
+
+            <h3 className="section-title" style={{ marginTop: 32 }}>
+              Categorías
+            </h3>
             <div className="category-row">
               {CATEGORIES.map((category) => (
                 <button
@@ -413,15 +478,29 @@ export default function Home() {
             <div className="menu-grid">
               {visibleMenu.map((item) => (
                 <div key={item.id} className="menu-card">
-                  <h4>{item.name}</h4>
-                  <p>{item.description}</p>
-                  <div className="menu-price">{formatCurrency(item.price)}</div>
-                  <button
-                    className="btn btn-outline btn-small"
-                    onClick={() => addToCart(item.id)}
-                  >
-                    Agregar al carrito
-                  </button>
+                  <div className="menu-thumb">
+                    <Image
+                      src={item.image}
+                      alt={item.name}
+                      fill
+                      sizes="(max-width: 768px) 100vw, 300px"
+                    />
+                  </div>
+                  <div className="menu-body">
+                    <div className="menu-top">
+                      <h4>{item.name}</h4>
+                      <span className="menu-price">
+                        {formatCurrency(item.price)}
+                      </span>
+                    </div>
+                    <p className="menu-desc">{item.description}</p>
+                    <button
+                      className="btn btn-outline btn-small"
+                      onClick={() => addToCart(item.id)}
+                    >
+                      Agregar al carrito
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>
