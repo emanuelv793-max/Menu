@@ -1,37 +1,49 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+﻿# Menu Lungo
 
-## Getting Started
+App Next.js para restaurante con pedidos en mesa y panel de cocina en tiempo real.
 
-First, run the development server:
+## Funcionalidades
+- Cliente: menú por categorías, carrito y envío de pedidos.
+- Cocina: panel en tiempo real con estados (nuevo, preparando, listo).
+- Login de cocina con Supabase Auth (email/password).
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+## Requisitos
+- Cuenta de Supabase (gratuita).
+- Node.js 18+.
+
+## Configuración local
+1) Instala dependencias:
+```
+npm install
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+2) Crea `.env.local` en la raíz con:
+```
+NEXT_PUBLIC_SUPABASE_URL=... 
+NEXT_PUBLIC_SUPABASE_ANON_KEY=...
+```
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+3) En Supabase, ejecuta el SQL de `supabase/schema.sql`.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+4) En Supabase Auth, habilita Email/Password y crea un usuario para cocina.
 
-## Learn More
+5) Ejecuta la app:
+```
+npm run dev
+```
 
-To learn more about Next.js, take a look at the following resources:
+## Producción (Vercel)
+- Agrega las mismas variables de entorno en Vercel:
+  - `NEXT_PUBLIC_SUPABASE_URL`
+  - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+- Despliega el repo.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Rutas
+- `/` cliente
+- `/admin` cocina (protegido)
+- `/login` login cocina
+- `/menu.pdf` carta completa (referencia)
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
-"# Men�"  
+## Notas
+- La inserción de pedidos permite usuarios anónimos.
+- El panel de cocina requiere login.
