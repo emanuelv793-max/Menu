@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { hasSupabaseConfig, supabase } from "@/lib/supabaseClient";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
 type OrderItem = {
   id: string;
@@ -42,8 +43,9 @@ export default function AdminPage() {
     let mounted = true;
 
     const checkSession = async () => {
-      if (!supabase) return;
-      const { data } = await supabase.auth.getSession();
+      const client = supabase;
+      if (!client) return;
+      const { data } = await client.auth.getSession();
       if (!data.session) {
         router.replace("/login");
         return;
@@ -52,8 +54,9 @@ export default function AdminPage() {
     };
 
     checkSession();
-    const { data: authListener } = supabase
-      ? supabase.auth.onAuthStateChange((_event, session) => {
+    const client = supabase;
+    const { data: authListener } = client
+      ? client.auth.onAuthStateChange((_event, session) => {
           if (!session) {
             router.replace("/login");
           } else {
@@ -70,11 +73,12 @@ export default function AdminPage() {
 
   useEffect(() => {
     if (!authChecked) return;
-    if (!supabase) return;
+    const client = supabase;
+    if (!client) return;
     let active = true;
 
-    const loadOrders = async () => {
-      const { data } = await supabase
+    const loadOrders = async (db: SupabaseClient) => {
+      const { data } = await db
         .from("orders")
         .select("*")
         .order("created_at", { ascending: false });
@@ -83,9 +87,9 @@ export default function AdminPage() {
       }
     };
 
-    loadOrders();
+    loadOrders(client);
 
-    const channel = supabase
+    const channel = client
       .channel("orders-realtime")
       .on(
         "postgres_changes",
@@ -127,8 +131,9 @@ export default function AdminPage() {
     id: number,
     status: OrderRecord["status"]
   ) => {
-    if (!supabase) return;
-    const { data } = await supabase
+    const client = supabase;
+    if (!client) return;
+    const { data } = await client
       .from("orders")
       .update({ status })
       .eq("id", id)
