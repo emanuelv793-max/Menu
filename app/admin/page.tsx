@@ -1,7 +1,6 @@
 ﻿"use client";
 
-import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { hasSupabaseConfig, supabase } from "@/lib/supabaseClient";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -18,8 +17,9 @@ type OrderRecord = {
   table_number: string;
   items: OrderItem[];
   total: number;
-  status: "new" | "preparing" | "ready";
+  status: "new" | "preparing" | "ready" | "served";
   created_at: string;
+  served_at?: string | null;
 };
 
 const formatCurrency = (value: number) =>
@@ -28,16 +28,22 @@ const formatCurrency = (value: number) =>
     currency: "EUR",
   }).format(value);
 
-const formatTime = (value: string) =>
-  new Intl.DateTimeFormat("es-ES", {
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(new Date(value));
+const formatTime = (value?: string | null) =>
+  value
+    ? new Intl.DateTimeFormat("es-ES", {
+        hour: "2-digit",
+        minute: "2-digit",
+      }).format(new Date(value))
+    : "—";
 
 export default function AdminPage() {
   const router = useRouter();
   const [orders, setOrders] = useState<OrderRecord[]>([]);
   const [authChecked, setAuthChecked] = useState(false);
+  const [audioReady, setAudioReady] = useState(false);
+  const beepIntervalRef = useRef<number | null>(null);
+  const audioCtxRef = useRef<AudioContext | null>(null);
+  const lastBeepRef = useRef(0);
 
   useEffect(() => {
     let mounted = true;
@@ -70,6 +76,37 @@ export default function AdminPage() {
       authListener?.subscription.unsubscribe();
     };
   }, [router]);
+
+  useEffect(() => {
+    const enableAudio = async () => {
+      if (audioCtxRef.current) return;
+      const ctx = new AudioContext();
+      try {
+        await ctx.resume();
+      } catch {
+        // Ignore resume errors
+      }
+      audioCtxRef.current = ctx;
+      setAudioReady(true);
+    };
+
+    const onFirstInteraction = () => {
+      enableAudio();
+      window.removeEventListener("click", onFirstInteraction);
+      window.removeEventListener("keydown", onFirstInteraction);
+      window.removeEventListener("touchstart", onFirstInteraction);
+    };
+
+    window.addEventListener("click", onFirstInteraction);
+    window.addEventListener("keydown", onFirstInteraction);
+    window.addEventListener("touchstart", onFirstInteraction);
+
+    return () => {
+      window.removeEventListener("click", onFirstInteraction);
+      window.removeEventListener("keydown", onFirstInteraction);
+      window.removeEventListener("touchstart", onFirstInteraction);
+    };
+  }, []);
 
   useEffect(() => {
     if (!authChecked) return;
@@ -121,6 +158,48 @@ export default function AdminPage() {
     };
   }, [authChecked]);
 
+  useEffect(() => {
+    const hasNewOrders = orders.some((order) => order.status === "new");
+    if (!hasNewOrders) {
+      if (beepIntervalRef.current) {
+        window.clearInterval(beepIntervalRef.current);
+        beepIntervalRef.current = null;
+      }
+      return;
+    }
+
+    if (!beepIntervalRef.current) {
+      beepIntervalRef.current = window.setInterval(() => {
+        const now = Date.now();
+        if (now - lastBeepRef.current < 1800) return;
+        lastBeepRef.current = now;
+
+        const ctx = audioCtxRef.current;
+        if (!ctx) return;
+        if (ctx.state === "suspended") {
+          ctx.resume().catch(() => undefined);
+        }
+
+        const oscillator = ctx.createOscillator();
+        const gain = ctx.createGain();
+        oscillator.type = "square";
+        oscillator.frequency.value = 740;
+        gain.gain.value = 0.06;
+        oscillator.connect(gain);
+        gain.connect(ctx.destination);
+        oscillator.start();
+        oscillator.stop(ctx.currentTime + 0.25);
+      }, 2000);
+    }
+
+    return () => {
+      if (beepIntervalRef.current) {
+        window.clearInterval(beepIntervalRef.current);
+        beepIntervalRef.current = null;
+      }
+    };
+  }, [orders]);
+
   const sortedOrders = useMemo(() => {
     return [...orders].sort((a, b) =>
       a.created_at < b.created_at ? 1 : -1
@@ -133,9 +212,14 @@ export default function AdminPage() {
   ) => {
     const client = supabase;
     if (!client) return;
+    const payload: Partial<OrderRecord> = { status };
+    if (status === "served") {
+      payload.served_at = new Date().toISOString();
+    }
+
     const { data } = await client
       .from("orders")
-      .update({ status })
+      .update(payload)
       .eq("id", id)
       .select("*")
       .single();
@@ -150,14 +234,24 @@ export default function AdminPage() {
   const badgeClass = (status: OrderRecord["status"]) => {
     if (status === "preparing") return "badge badge-prep";
     if (status === "ready") return "badge badge-ready";
+    if (status === "served") return "badge badge-served";
     return "badge badge-new";
   };
 
   const statusLabel = (status: OrderRecord["status"]) => {
     if (status === "preparing") return "preparando";
     if (status === "ready") return "listo";
+    if (status === "served") return "servido";
     return "nuevo";
   };
+
+  const cardClass = (status: OrderRecord["status"]) => {
+    if (status === "preparing") return "order-card status-preparing";
+    if (status === "ready") return "order-card status-ready";
+    if (status === "served") return "order-card status-served";
+    return "order-card status-new";
+  };
+
 
   if (!hasSupabaseConfig) {
     return (
@@ -198,6 +292,9 @@ export default function AdminPage() {
     );
   }
 
+  const activeOrders = sortedOrders.filter((order) => order.status !== "served");
+  const servedOrders = sortedOrders.filter((order) => order.status === "served");
+
   return (
     <div className="page">
       <header className="topbar">
@@ -206,20 +303,15 @@ export default function AdminPage() {
             <div className="brand-mark">Menu Lungo</div>
             <div className="brand-sub">Cocina en vivo</div>
           </div>
-          <div style={{ display: "flex", gap: 10 }}>
-            <Link className="nav-link" href="/">
-              Volver al salón
-            </Link>
-            <button
-              className="nav-link"
-              onClick={async () => {
-                await supabase?.auth.signOut();
-                router.replace("/login");
-              }}
-            >
-              Cerrar sesión
-            </button>
-          </div>
+          <button
+            className="nav-link"
+            onClick={async () => {
+              await supabase?.auth.signOut();
+              router.replace("/login");
+            }}
+          >
+            Cerrar sesión
+          </button>
         </div>
       </header>
 
@@ -242,19 +334,25 @@ export default function AdminPage() {
           </div>
         </section>
 
-        {sortedOrders.length === 0 ? (
+        {!audioReady ? (
+          <p className="status-text" style={{ marginTop: 12 }}>
+            Activa el sonido con un clic para alertas de pedidos nuevos.
+          </p>
+        ) : null}
+
+        {activeOrders.length === 0 ? (
           <p className="status-text" style={{ marginTop: 20 }}>
             Esperando pedidos desde el salón...
           </p>
         ) : (
           <section className="admin-grid">
-            {sortedOrders.map((order) => (
-              <div key={order.id} className="order-card">
+            {activeOrders.map((order) => (
+              <div key={order.id} className={cardClass(order.status)}>
                 <div style={{ display: "flex", justifyContent: "space-between" }}>
                   <div>
                     <strong>Mesa {order.table_number}</strong>
                     <div className="status-text">
-                      {formatTime(order.created_at)}
+                      Pedido: {formatTime(order.created_at)}
                     </div>
                   </div>
                   <span className={badgeClass(order.status)}>
@@ -270,7 +368,9 @@ export default function AdminPage() {
                   ))}
                 </div>
 
-                <div className="menu-price">Total: {formatCurrency(order.total)}</div>
+                <div className="menu-price">
+                  Total: {formatCurrency(order.total)}
+                </div>
 
                 <div className="order-actions">
                   <button
@@ -291,11 +391,48 @@ export default function AdminPage() {
                   >
                     Listo
                   </button>
+                  {order.status === "ready" ? (
+                    <button
+                      className="btn btn-outline btn-small"
+                      onClick={() => updateStatus(order.id, "served")}
+                    >
+                      Servido
+                    </button>
+                  ) : null}
                 </div>
               </div>
             ))}
           </section>
         )}
+
+        {servedOrders.length > 0 ? (
+          <section style={{ marginTop: 32 }}>
+            <h3 className="section-title">Servidos</h3>
+            <div className="admin-grid">
+              {servedOrders.map((order) => (
+                <div key={order.id} className={cardClass(order.status)}>
+                  <div style={{ display: "flex", justifyContent: "space-between" }}>
+                    <div>
+                      <strong>Mesa {order.table_number}</strong>
+                      <div className="status-text">
+                        Pedido: {formatTime(order.created_at)}
+                      </div>
+                      <div className="status-text">
+                        Servido: {formatTime(order.served_at)}
+                      </div>
+                    </div>
+                    <span className={badgeClass(order.status)}>
+                      {statusLabel(order.status)}
+                    </span>
+                  </div>
+                  <div className="menu-price">
+                    Total: {formatCurrency(order.total)}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+        ) : null}
       </main>
     </div>
   );

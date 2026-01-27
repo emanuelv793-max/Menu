@@ -5,8 +5,12 @@ create table if not exists public.orders (
   items jsonb not null,
   total numeric(10,2) not null,
   status text not null default 'new',
-  created_at timestamptz not null default now()
+  created_at timestamptz not null default now(),
+  served_at timestamptz
 );
+
+alter table public.orders
+  add column if not exists served_at timestamptz;
 
 -- Realtime
 alter publication supabase_realtime add table public.orders;

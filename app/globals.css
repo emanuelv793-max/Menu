@@ -418,6 +418,11 @@ a {
   color: var(--success);
 }
 
+.badge-served {
+  background: rgba(47, 125, 50, 0.08);
+  color: var(--success);
+}
+
 .status-text {
   font-size: 13px;
   color: var(--muted);
@@ -438,6 +443,27 @@ a {
   display: grid;
   gap: 10px;
   box-shadow: var(--shadow-soft);
+}
+
+.order-card.status-new {
+  background: #f3f3f3;
+  border-color: rgba(0, 0, 0, 0.08);
+}
+
+.order-card.status-preparing {
+  background: #eef4ff;
+  border-color: rgba(63, 106, 255, 0.28);
+}
+
+.order-card.status-ready {
+  background: #ecf8f0;
+  border-color: rgba(47, 125, 50, 0.25);
+}
+
+.order-card.status-served {
+  background: #f7f7f7;
+  border-color: rgba(0, 0, 0, 0.06);
+  opacity: 0.9;
 }
 
 .order-items {
