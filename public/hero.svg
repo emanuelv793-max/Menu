@@ -1,0 +1,38 @@
+﻿<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 500">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#2a2116" stop-opacity="0.10"/>
+      <stop offset="1" stop-color="#2a2116" stop-opacity="0"/>
+    </linearGradient>
+    <pattern id="grain" width="14" height="14" patternUnits="userSpaceOnUse">
+      <circle cx="2" cy="3" r="1" fill="#2a2116" opacity="0.08"/>
+      <circle cx="10" cy="7" r="1" fill="#2a2116" opacity="0.06"/>
+      <circle cx="6" cy="12" r="1" fill="#2a2116" opacity="0.05"/>
+    </pattern>
+  </defs>
+  <rect width="800" height="500" fill="#f6efe6"/>
+  <rect width="800" height="500" fill="url(#grain)"/>
+  <rect width="800" height="500" fill="url(#bg)"/>
+
+  <!-- Olive branches -->
+  <g fill="none" stroke="#2a2116" stroke-opacity="0.30" stroke-width="3">
+    <path d="M140 410 C 190 340, 240 300, 320 260"/>
+    <path d="M660 420 C 610 350, 560 305, 480 260"/>
+  </g>
+
+  <g fill="#2a2116" opacity="0.22">
+    <ellipse cx="205" cy="360" rx="18" ry="9" transform="rotate(-18 205 360)"/>
+    <ellipse cx="250" cy="325" rx="16" ry="8" transform="rotate(-24 250 325)"/>
+    <ellipse cx="295" cy="292" rx="14" ry="7" transform="rotate(-26 295 292)"/>
+
+    <ellipse cx="595" cy="366" rx="18" ry="9" transform="rotate(18 595 366)"/>
+    <ellipse cx="550" cy="332" rx="16" ry="8" transform="rotate(24 550 332)"/>
+    <ellipse cx="505" cy="298" rx="14" ry="7" transform="rotate(26 505 298)"/>
+  </g>
+
+  <!-- Plate silhouette -->
+  <g fill="none" stroke="#2a2116" stroke-opacity="0.22" stroke-width="10">
+    <circle cx="400" cy="290" r="160"/>
+    <circle cx="400" cy="290" r="110" stroke-width="6"/>
+  </g>
+</svg>

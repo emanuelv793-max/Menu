@@ -37,8 +37,7 @@ const MENU: MenuItem[] = [
     description: "Aceite, cebolla, aceitunas y tomate.",
     price: 4.85,
     category: "Entrantes",
-    image:
-      "https://images.unsplash.com/photo-1604908178068-2c87c34a9b22?auto=format&fit=crop&w=800&q=80",
+    image: "/dishes/focaccia.svg",
   },
   {
     id: "ent-2",
@@ -46,8 +45,7 @@ const MENU: MenuItem[] = [
     description: "Base de pizza con queso parmigiano.",
     price: 5.15,
     category: "Entrantes",
-    image:
-      "https://images.unsplash.com/photo-1604908178068-16c7d98ae035?auto=format&fit=crop&w=800&q=80",
+    image: "/dishes/focaccia.svg",
   },
   {
     id: "ent-3",
@@ -55,8 +53,7 @@ const MENU: MenuItem[] = [
     description: "Base de pizza con trufa negra.",
     price: 5.55,
     category: "Entrantes",
-    image:
-      "https://images.unsplash.com/photo-1504674900247-0877df9cc836?auto=format&fit=crop&w=800&q=80",
+    image: "/dishes/focaccia.svg",
   },
   // Entrantes fríos/calientes
   {
@@ -65,8 +62,7 @@ const MENU: MenuItem[] = [
     description: "Jamón ibérico y pollo asado (8 uds).",
     price: 11.85,
     category: "Entrantes",
-    image:
-      "https://images.unsplash.com/photo-1604908177683-2b7d94c6db1c?auto=format&fit=crop&w=800&q=80",
+    image: "/dishes/croquetas.svg",
   },
   {
     id: "ent-5",
@@ -74,8 +70,7 @@ const MENU: MenuItem[] = [
     description: "Solomillo, limón, AOVE y parmigiano 24M.",
     price: 17.75,
     category: "Entrantes",
-    image:
-      "https://images.unsplash.com/photo-1466637574441-749b8f19452f?auto=format&fit=crop&w=800&q=80",
+    image: "/dishes/carpaccio.svg",
   },
   {
     id: "ent-6",
@@ -83,8 +78,7 @@ const MENU: MenuItem[] = [
     description: "Mermelada de tomate, pesto, rúcula y piñones.",
     price: 14.55,
     category: "Entrantes",
-    image:
-      "https://images.unsplash.com/photo-1551024601-bec78aea704b?auto=format&fit=crop&w=800&q=80",
+    image: "/dishes/burrata.svg",
   },
   // Ensaladas
   {
@@ -93,8 +87,7 @@ const MENU: MenuItem[] = [
     description: "Lechugas, tomate, cecina, beicon y rulo de cabra.",
     price: 14.55,
     category: "Ensaladas",
-    image:
-      "https://images.unsplash.com/photo-1512621776951-a57141f2eefd?auto=format&fit=crop&w=800&q=80",
+    image: "/dishes/salad.svg",
   },
   {
     id: "ens-2",
@@ -102,8 +95,7 @@ const MENU: MenuItem[] = [
     description: "Lechugas, pistachos, rulo de cabra, manzana y nueces.",
     price: 14.55,
     category: "Ensaladas",
-    image:
-      "https://images.unsplash.com/photo-1528715471579-d1bcf0ba5e83?auto=format&fit=crop&w=800&q=80",
+    image: "/dishes/salad.svg",
   },
   {
     id: "ens-3",
@@ -111,8 +103,7 @@ const MENU: MenuItem[] = [
     description: "Lechugas, pollo crujiente, pimiento asado y aguacate.",
     price: 14.55,
     category: "Ensaladas",
-    image:
-      "https://images.unsplash.com/photo-1504674900247-0877df9cc836?auto=format&fit=crop&w=800&q=80",
+    image: "/dishes/salad.svg",
   },
   // Gratinados
   {
@@ -121,8 +112,7 @@ const MENU: MenuItem[] = [
     description: "Asado tradicional, bechamel y parmigiano.",
     price: 18.6,
     category: "Gratinados",
-    image:
-      "https://images.unsplash.com/photo-1467003909585-2f8a72700288?auto=format&fit=crop&w=800&q=80",
+    image: "/dishes/lasagna.svg",
   },
   {
     id: "gra-2",
@@ -130,8 +120,7 @@ const MENU: MenuItem[] = [
     description: "Brandada de bacalao y gambas, bechamel de piquillo.",
     price: 18.1,
     category: "Gratinados",
-    image:
-      "https://images.unsplash.com/photo-1473093295043-cdd812d0e601?auto=format&fit=crop&w=800&q=80",
+    image: "/dishes/lasagna.svg",
   },
   {
     id: "gra-3",
@@ -139,8 +128,7 @@ const MENU: MenuItem[] = [
     description: "Cinco láminas con boloñesa, bechamel y parmigiano.",
     price: 18.95,
     category: "Gratinados",
-    image:
-      "https://images.unsplash.com/photo-1540189549336-e6e99c3679fe?auto=format&fit=crop&w=800&q=80",
+    image: "/dishes/lasagna.svg",
   },
   // Pizzas clásicas
   {
@@ -149,8 +137,7 @@ const MENU: MenuItem[] = [
     description: "Tomate, mozzarella y jamón de York.",
     price: 16.35,
     category: "Pizzas",
-    image:
-      "https://images.unsplash.com/photo-1548365328-5473d2fb5650?auto=format&fit=crop&w=800&q=80",
+    image: "/dishes/pizza.svg",
   },
   {
     id: "piz-2",
@@ -158,8 +145,7 @@ const MENU: MenuItem[] = [
     description: "Tomate, mozzarella, pepperoni y beicon crujiente.",
     price: 16.55,
     category: "Pizzas",
-    image:
-      "https://images.unsplash.com/photo-1506354666786-959d6d497f1a?auto=format&fit=crop&w=800&q=80",
+    image: "/dishes/pizza.svg",
   },
   {
     id: "piz-3",
@@ -167,8 +153,7 @@ const MENU: MenuItem[] = [
     description: "Tomate, mozzarella, jamón, champiñones, atún y alcachofas.",
     price: 16.75,
     category: "Pizzas",
-    image:
-      "https://images.unsplash.com/photo-1513104890138-7c749659a591?auto=format&fit=crop&w=800&q=80",
+    image: "/dishes/pizza.svg",
   },
   // Pizzas especiales
   {
@@ -177,8 +162,7 @@ const MENU: MenuItem[] = [
     description: "Tomate, burrata, carpaccio y rúcula.",
     price: 17.05,
     category: "Pizzas",
-    image:
-      "https://images.unsplash.com/photo-1604908177520-4025a3f02c8b?auto=format&fit=crop&w=800&q=80",
+    image: "/dishes/pizza.svg",
   },
   {
     id: "piz-5",
@@ -186,8 +170,7 @@ const MENU: MenuItem[] = [
     description: "Tomate, mozzarella, beicon, scamorza y parmigiano.",
     price: 16.75,
     category: "Pizzas",
-    image:
-      "https://images.unsplash.com/photo-1528735602780-2552fd46c7af?auto=format&fit=crop&w=800&q=80",
+    image: "/dishes/pizza.svg",
   },
   {
     id: "piz-6",
@@ -195,8 +178,7 @@ const MENU: MenuItem[] = [
     description: "Base de ternera, pepperoni, longaniza y guindilla.",
     price: 16.75,
     category: "Pizzas",
-    image:
-      "https://images.unsplash.com/photo-1542281286-9e0a16bb7366?auto=format&fit=crop&w=800&q=80",
+    image: "/dishes/pizza.svg",
   },
   // Pastas (selección)
   {
@@ -205,8 +187,7 @@ const MENU: MenuItem[] = [
     description: "Pesto a la crema con beicon y parmigiano.",
     price: 14.6,
     category: "Pastas",
-    image:
-      "https://images.unsplash.com/photo-1504674900247-0877df9cc836?auto=format&fit=crop&w=800&q=80",
+    image: "/dishes/pasta.svg",
   },
   {
     id: "pas-2",
@@ -214,8 +195,7 @@ const MENU: MenuItem[] = [
     description: "Crema de funghi porcini y trufa con setas.",
     price: 14.6,
     category: "Pastas",
-    image:
-      "https://images.unsplash.com/photo-1504674900247-08da8d7b2f7f?auto=format&fit=crop&w=800&q=80",
+    image: "/dishes/pasta.svg",
   },
   {
     id: "pas-3",
@@ -223,8 +203,7 @@ const MENU: MenuItem[] = [
     description: "Carbonara clásica “al mio modo”.",
     price: 14.6,
     category: "Pastas",
-    image:
-      "https://images.unsplash.com/photo-1504674900247-c03fd06b7f80?auto=format&fit=crop&w=800&q=80",
+    image: "/dishes/pasta.svg",
   },
   // Carnes
   {
@@ -233,8 +212,7 @@ const MENU: MenuItem[] = [
     description: "Medio pollo en su jugo, patatas fritas y salsa mesone.",
     price: 17.35,
     category: "Carnes",
-    image:
-      "https://images.unsplash.com/photo-1604908177248-29f1ba5e4cb6?auto=format&fit=crop&w=800&q=80",
+    image: "/dishes/chicken.svg",
   },
   {
     id: "car-2",
@@ -242,8 +220,7 @@ const MENU: MenuItem[] = [
     description: "Foie, beicon, scamorza y cebolla caramelizada.",
     price: 20.05,
     category: "Carnes",
-    image:
-      "https://images.unsplash.com/photo-1550547660-d9450f859349?auto=format&fit=crop&w=800&q=80",
+    image: "/dishes/burger.svg",
   },
   {
     id: "car-3",
@@ -251,8 +228,7 @@ const MENU: MenuItem[] = [
     description: "Con guarnición; opción salsas aparte.",
     price: 25.05,
     category: "Carnes",
-    image:
-      "https://images.unsplash.com/photo-1559057194-55dc0ad3f207?auto=format&fit=crop&w=800&q=80",
+    image: "/dishes/steak.svg",
   },
   // Bebidas (vinos y sangrías)
   {
@@ -261,8 +237,7 @@ const MENU: MenuItem[] = [
     description: "IGT Reggio Emilia · espumoso tinto.",
     price: 13.95,
     category: "Bebidas",
-    image:
-      "https://images.unsplash.com/photo-1514361892635-6e122620e4d1?auto=format&fit=crop&w=800&q=80",
+    image: "/dishes/wine.svg",
   },
   {
     id: "beb-2",
@@ -270,8 +245,7 @@ const MENU: MenuItem[] = [
     description: "Tinto, rosado o blanco.",
     price: 3.25,
     category: "Bebidas",
-    image:
-      "https://images.unsplash.com/photo-1510626176961-4b37d0b4e904?auto=format&fit=crop&w=800&q=80",
+    image: "/dishes/wine.svg",
   },
   {
     id: "beb-3",
@@ -279,8 +253,7 @@ const MENU: MenuItem[] = [
     description: "Receta de la casa.",
     price: 16.95,
     category: "Bebidas",
-    image:
-      "https://images.unsplash.com/photo-1504674900247-487aa01e1e48?auto=format&fit=crop&w=800&q=80",
+    image: "/dishes/sangria.svg",
   },
 ];
 
@@ -399,10 +372,11 @@ export default function Home() {
     <div className="page">
       <div className="hero-visual">
         <Image
-          src="https://images.unsplash.com/photo-1604908177520-4025a3f02c8b?auto=format&fit=crop&w=1400&q=80"
-          alt="Mesa con pizza y vino"
+          src="/hero.svg"
+          alt="Fondo de carta"
           fill
           priority
+          unoptimized
           className="hero-bg"
         />
         <div className="hero-overlay" />
