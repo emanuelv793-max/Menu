@@ -41,6 +41,7 @@ export default function AdminPage() {
   const [orders, setOrders] = useState<OrderRecord[]>([]);
   const [authChecked, setAuthChecked] = useState(false);
   const [audioReady, setAudioReady] = useState(false);
+  const [actionStatus, setActionStatus] = useState("");
   const beepIntervalRef = useRef<number | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
   const lastBeepRef = useRef(0);
@@ -212,17 +213,27 @@ export default function AdminPage() {
   ) => {
     const client = supabase;
     if (!client) return;
-    const payload: Partial<OrderRecord> = { status };
-    if (status === "served") {
-      payload.served_at = new Date().toISOString();
-    }
+    setActionStatus("");
+    const servedAt =
+      status === "served" ? new Date().toISOString() : undefined;
+    const payload: Partial<OrderRecord> =
+      status === "served"
+        ? { status, served_at: servedAt }
+        : { status };
 
-    const { data } = await client
+    const { data, error } = await client
       .from("orders")
       .update(payload)
       .eq("id", id)
       .select("*")
       .single();
+
+    if (error) {
+      setActionStatus(
+        `No se pudo actualizar el pedido: ${error.message || "error"}`
+      );
+      return;
+    }
 
     if (data) {
       setOrders((prev) =>
@@ -337,6 +348,11 @@ export default function AdminPage() {
         {!audioReady ? (
           <p className="status-text" style={{ marginTop: 12 }}>
             Activa el sonido con un clic para alertas de pedidos nuevos.
+          </p>
+        ) : null}
+        {actionStatus ? (
+          <p className="status-text" style={{ marginTop: 8 }}>
+            {actionStatus}
           </p>
         ) : null}
 
