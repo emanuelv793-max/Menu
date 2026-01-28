@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { SpeedInsights } from "@vercel/speed-insights/next";
 import { Playfair_Display, Sora } from "next/font/google";
 import "./globals.css";
 
@@ -29,6 +30,7 @@ export default function RootLayout({
     <html lang="es">
       <body className={`${sans.variable} ${display.variable} antialiased`}>
         {children}
+        <SpeedInsights />
       </body>
     </html>
   );
