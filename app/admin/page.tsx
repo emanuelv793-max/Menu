@@ -10,16 +10,30 @@ type OrderItem = {
   name: string;
   qty: number;
   price: number;
+  note?: string | null;
 };
 
 type OrderRecord = {
-  id: number;
+  id: string;
+  restaurant_id: string;
   table_number: string;
-  items: OrderItem[];
+  items?: OrderItem[];
+  order_items?: {
+    product_id: string;
+    quantity: number;
+    note: string | null;
+    price: number;
+  }[];
   total: number;
-  status: "new" | "preparing" | "ready" | "served";
+  status: "enviado" | "preparando" | "listo" | "entregado";
   created_at: string;
   served_at?: string | null;
+};
+
+type Restaurant = {
+  id: string;
+  name: string;
+  slug: string;
 };
 
 const formatCurrency = (value: number) =>
@@ -42,6 +56,12 @@ export default function AdminPage() {
   const [authChecked, setAuthChecked] = useState(false);
   const [audioReady, setAudioReady] = useState(false);
   const [actionStatus, setActionStatus] = useState("");
+  const [showServed, setShowServed] = useState(false);
+  const [restaurants, setRestaurants] = useState<Restaurant[]>([]);
+  const [restaurantId, setRestaurantId] = useState<string | "all">("all");
+  const [statusFilter, setStatusFilter] = useState<
+    "all" | "enviado" | "preparando" | "listo" | "entregado"
+  >("all");
   const beepIntervalRef = useRef<number | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
   const lastBeepRef = useRef(0);
@@ -115,17 +135,34 @@ export default function AdminPage() {
     if (!client) return;
     let active = true;
 
-    const loadOrders = async (db: SupabaseClient) => {
-      const { data } = await db
+    const loadData = async (db: SupabaseClient) => {
+      const { data: restData } = await db
+        .from("restaurants")
+        .select("id,name,slug")
+        .order("name");
+      if (active && restData) {
+        setRestaurants(restData as Restaurant[]);
+        if (restaurantId === "all" && restData.length > 0) {
+          setRestaurantId(restData[0].id);
+        }
+      }
+
+      const query = db
         .from("orders")
-        .select("*")
-        .order("created_at", { ascending: false });
-      if (active && data) {
-        setOrders(data as OrderRecord[]);
+        .select("*, order_items(id, product_id, quantity, note, price)")
+        .order("created_at", { ascending: true });
+
+      if (restaurantId !== "all") {
+        query.eq("restaurant_id", restaurantId);
+      }
+
+      const { data: ordersData } = await query;
+      if (active && ordersData) {
+        setOrders(ordersData as unknown as OrderRecord[]);
       }
     };
 
-    loadOrders(client);
+    loadData(client);
 
     const channel = client
       .channel("orders-realtime")
@@ -135,7 +172,7 @@ export default function AdminPage() {
         (payload) => {
           if (payload.eventType === "INSERT") {
             const newOrder = payload.new as OrderRecord;
-            setOrders((prev) => [newOrder, ...prev]);
+            setOrders((prev) => [...prev, newOrder]);
           }
           if (payload.eventType === "UPDATE") {
             const updated = payload.new as OrderRecord;
@@ -157,10 +194,10 @@ export default function AdminPage() {
       active = false;
       channel.unsubscribe();
     };
-  }, [authChecked]);
+  }, [authChecked, restaurantId]);
 
   useEffect(() => {
-    const hasNewOrders = orders.some((order) => order.status === "new");
+    const hasNewOrders = orders.some((order) => order.status === "enviado");
     if (!hasNewOrders) {
       if (beepIntervalRef.current) {
         window.clearInterval(beepIntervalRef.current);
@@ -203,35 +240,57 @@ export default function AdminPage() {
 
   const sortedOrders = useMemo(() => {
     return [...orders].sort((a, b) =>
-      a.created_at < b.created_at ? 1 : -1
+      a.created_at > b.created_at ? 1 : -1
     );
   }, [orders]);
 
-  const updateStatus = async (
-    id: number,
-    status: OrderRecord["status"]
-  ) => {
+  const updateStatus = async (id: string, status: OrderRecord["status"]) => {
     const client = supabase;
     if (!client) return;
     setActionStatus("");
-    const servedAt =
-      status === "served" ? new Date().toISOString() : undefined;
+    const servedAt = status === "entregado" ? new Date().toISOString() : null;
     const payload: Partial<OrderRecord> =
-      status === "served"
-        ? { status, served_at: servedAt }
-        : { status };
+      status === "entregado" ? { status, served_at: servedAt } : { status };
 
-    const { data, error } = await client
+    let previousOrder: OrderRecord | undefined;
+    setOrders((prev) => {
+      previousOrder = prev.find((order) => order.id === id);
+      return prev.map((order) =>
+        order.id === id
+          ? { ...order, status, served_at: servedAt ?? order.served_at }
+          : order
+      );
+    });
+
+    let { data, error } = await client
       .from("orders")
       .update(payload)
       .eq("id", id)
       .select("*")
       .single();
 
+    if (error && /served_at/i.test(error.message || "")) {
+      const retry = await client
+        .from("orders")
+        .update({ status })
+        .eq("id", id)
+        .select("*")
+        .single();
+      data = retry.data;
+      error = retry.error;
+    }
+
     if (error) {
       setActionStatus(
         `No se pudo actualizar el pedido: ${error.message || "error"}`
       );
+      if (previousOrder) {
+        setOrders((prev) =>
+          prev.map((order) =>
+            order.id === id && previousOrder ? previousOrder : order
+          )
+        );
+      }
       return;
     }
 
@@ -243,23 +302,23 @@ export default function AdminPage() {
   };
 
   const badgeClass = (status: OrderRecord["status"]) => {
-    if (status === "preparing") return "badge badge-prep";
-    if (status === "ready") return "badge badge-ready";
-    if (status === "served") return "badge badge-served";
+    if (status === "preparando") return "badge badge-prep";
+    if (status === "listo") return "badge badge-ready";
+    if (status === "entregado") return "badge badge-served";
     return "badge badge-new";
   };
 
   const statusLabel = (status: OrderRecord["status"]) => {
-    if (status === "preparing") return "preparando";
-    if (status === "ready") return "listo";
-    if (status === "served") return "servido";
-    return "nuevo";
+    if (status === "preparando") return "Preparando";
+    if (status === "listo") return "Listo";
+    if (status === "entregado") return "Entregado";
+    return "Enviado";
   };
 
   const cardClass = (status: OrderRecord["status"]) => {
-    if (status === "preparing") return "order-card status-preparing";
-    if (status === "ready") return "order-card status-ready";
-    if (status === "served") return "order-card status-served";
+    if (status === "preparando") return "order-card status-preparing";
+    if (status === "listo") return "order-card status-ready";
+    if (status === "entregado") return "order-card status-served";
     return "order-card status-new";
   };
 
@@ -303,8 +362,16 @@ export default function AdminPage() {
     );
   }
 
-  const activeOrders = sortedOrders.filter((order) => order.status !== "served");
-  const servedOrders = sortedOrders.filter((order) => order.status === "served");
+  const filtered = sortedOrders.filter((order) => {
+    const okRestaurant =
+      restaurantId === "all" ? true : order.restaurant_id === restaurantId;
+    const okStatus =
+      statusFilter === "all" ? true : order.status === statusFilter;
+    return okRestaurant && okStatus;
+  });
+
+  const activeOrders = filtered.filter((order) => order.status !== "entregado");
+  const servedOrders = filtered.filter((order) => order.status === "entregado");
 
   return (
     <div className="page">
@@ -342,6 +409,39 @@ export default function AdminPage() {
                 ? "Sin pedidos en cola todavía."
                 : `Pedidos activos: ${orders.length}`}
             </p>
+            <div style={{ display: "grid", gap: 10, marginTop: 12 }}>
+              <label style={{ fontSize: 13, color: "#6f5b4c" }}>
+                Restaurante
+              </label>
+              <select
+                className="input"
+                value={restaurantId}
+                onChange={(e) => setRestaurantId(e.target.value)}
+              >
+                <option value="all">Todos</option>
+                {restaurants.map((r) => (
+                  <option key={r.id} value={r.id}>
+                    {r.name}
+                  </option>
+                ))}
+              </select>
+              <label style={{ fontSize: 13, color: "#6f5b4c" }}>
+                Estado
+              </label>
+              <select
+                className="input"
+                value={statusFilter}
+                onChange={(e) =>
+                  setStatusFilter(e.target.value as typeof statusFilter)
+                }
+              >
+                <option value="all">Todos</option>
+                <option value="enviado">Enviado</option>
+                <option value="preparando">Preparando</option>
+                <option value="listo">Listo</option>
+                <option value="entregado">Entregado</option>
+              </select>
+            </div>
           </div>
         </section>
 
@@ -377,9 +477,18 @@ export default function AdminPage() {
                 </div>
 
                 <div className="order-items">
-                  {order.items.map((item) => (
+                  {(order.items ??
+                    order.order_items?.map((i) => ({
+                      id: i.product_id,
+                      qty: i.quantity,
+                      name: i.product_id,
+                      note: i.note,
+                    })) ??
+                    []
+                  ).map((item) => (
                     <div key={item.id}>
                       {item.qty} × {item.name}
+                      {item.note ? ` · ${item.note}` : ""}
                     </div>
                   ))}
                 </div>
@@ -391,28 +500,28 @@ export default function AdminPage() {
                 <div className="order-actions">
                   <button
                     className="btn btn-outline btn-small"
-                    onClick={() => updateStatus(order.id, "new")}
+                    onClick={() => updateStatus(order.id, "enviado")}
                   >
-                    Nuevo
+                    Enviado
                   </button>
                   <button
                     className="btn btn-outline btn-small"
-                    onClick={() => updateStatus(order.id, "preparing")}
+                    onClick={() => updateStatus(order.id, "preparando")}
                   >
                     Preparando
                   </button>
                   <button
                     className="btn btn-primary btn-small"
-                    onClick={() => updateStatus(order.id, "ready")}
+                    onClick={() => updateStatus(order.id, "listo")}
                   >
                     Listo
                   </button>
-                  {order.status === "ready" ? (
+                  {order.status === "listo" ? (
                     <button
                       className="btn btn-outline btn-small"
-                      onClick={() => updateStatus(order.id, "served")}
+                      onClick={() => updateStatus(order.id, "entregado")}
                     >
-                      Servido
+                      Entregado
                     </button>
                   ) : null}
                 </div>
@@ -423,30 +532,54 @@ export default function AdminPage() {
 
         {servedOrders.length > 0 ? (
           <section style={{ marginTop: 32 }}>
-            <h3 className="section-title">Servidos</h3>
-            <div className="admin-grid">
-              {servedOrders.map((order) => (
-                <div key={order.id} className={cardClass(order.status)}>
-                  <div style={{ display: "flex", justifyContent: "space-between" }}>
-                    <div>
-                      <strong>Mesa {order.table_number}</strong>
-                      <div className="status-text">
-                        Pedido: {formatTime(order.created_at)}
-                      </div>
-                      <div className="status-text">
-                        Servido: {formatTime(order.served_at)}
-                      </div>
-                    </div>
-                    <span className={badgeClass(order.status)}>
-                      {statusLabel(order.status)}
-                    </span>
-                  </div>
-                  <div className="menu-price">
-                    Total: {formatCurrency(order.total)}
-                  </div>
-                </div>
-              ))}
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: 12,
+              }}
+            >
+              <h3 className="section-title">Servidos</h3>
+              <button
+                className="btn btn-outline btn-small"
+                onClick={() => setShowServed((prev) => !prev)}
+              >
+                {showServed
+                  ? "Ocultar servidos"
+                  : `Ver servidos (${servedOrders.length})`}
+              </button>
             </div>
+            {showServed ? (
+              <div className="admin-grid">
+                {servedOrders.map((order) => (
+                  <div key={order.id} className={cardClass(order.status)}>
+                    <div
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                      }}
+                    >
+                      <div>
+                        <strong>Mesa {order.table_number}</strong>
+                        <div className="status-text">
+                          Pedido: {formatTime(order.created_at)}
+                        </div>
+                        <div className="status-text">
+                          Servido: {formatTime(order.served_at)}
+                        </div>
+                      </div>
+                      <span className={badgeClass(order.status)}>
+                        {statusLabel(order.status)}
+                      </span>
+                    </div>
+                    <div className="menu-price">
+                      Total: {formatCurrency(order.total)}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : null}
           </section>
         ) : null}
       </main>
