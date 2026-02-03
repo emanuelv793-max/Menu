@@ -17,6 +17,7 @@ type Session = {
 
 type Modifier = { label: string; type: "remove" | "extra"; price?: number };
 type OrderItem = {
+  id: string;
   quantity: number;
   price: number;
   note: string | null;
@@ -52,14 +53,16 @@ export default function CashierTablePage() {
   const [userId, setUserId] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!supabase) return;
-    supabase.auth.getSession().then(({ data }) => setUserId(data.session?.user?.id ?? null));
+    const client = supabase;
+    if (!client) return;
+    client.auth.getSession().then(({ data }) => setUserId(data.session?.user?.id ?? null));
   }, []);
 
   useEffect(() => {
-    if (!supabase) return;
+    const client = supabase;
+    if (!client) return;
     const loadRestaurants = async () => {
-      const { data } = await supabase.from("restaurants").select("id,name,slug").order("name");
+      const { data } = await client.from("restaurants").select("id,name,slug").order("name");
       const list = (data ?? []) as Restaurant[];
       setRestaurants(list);
       if (!restaurantId && list.length > 0) setRestaurantId(list[0].id);
@@ -69,11 +72,12 @@ export default function CashierTablePage() {
   }, []);
 
   const loadSession = async () => {
-    if (!supabase || !restaurantId) return;
+    const client = supabase;
+    if (!client || !restaurantId) return;
     setLoading(true);
     setToast(null);
     try {
-      const { data: sessData, error: sessError } = await supabase
+      const { data: sessData, error: sessError } = await client
         .from("table_sessions")
         .select("id, restaurant_id, table_number, status, opened_at, closed_at")
         .eq("restaurant_id", restaurantId)
@@ -89,15 +93,51 @@ export default function CashierTablePage() {
       }
       const session = sessData as Session;
       setSession(session);
-      const { data: ordersData, error: ordersError } = await supabase
+      const { data: ordersData, error: ordersError } = await client
         .from("orders")
         .select(
-          "id, status, is_paid, created_at, order_items(quantity, price, note, products(name), order_item_modifiers(label,type,price))"
+          "id, status, is_paid, created_at, order_items(id, quantity, price, note, products(name))"
         )
         .eq("session_id", session.id)
         .order("created_at");
       if (ordersError) throw ordersError;
-      setOrders((ordersData ?? []) as Order[]);
+      const normalized: Order[] = (ordersData ?? []).map((o: any) => ({
+        id: o.id,
+        status: o.status,
+        is_paid: o.is_paid,
+        created_at: o.created_at,
+        order_items: (o.order_items ?? []).map((it: any) => ({
+          id: it.id,
+          quantity: Number(it.quantity),
+          price: Number(it.price),
+          note: it.note,
+          products: Array.isArray(it.products)
+            ? { name: it.products[0]?.name ?? null }
+            : { name: it.products?.name ?? null },
+        })),
+      }));
+      const itemIds = normalized.flatMap((o) => o.order_items.map((it) => it.id));
+      if (itemIds.length > 0) {
+        const { data: modsData, error: modsError } = await client
+          .from("order_item_modifiers")
+          .select("order_item_id, label, type, price")
+          .in("order_item_id", itemIds);
+        if (!modsError && modsData) {
+          const modsByItem = new Map<string, Modifier[]>();
+          modsData.forEach((m: any) => {
+            const list = modsByItem.get(m.order_item_id) ?? [];
+            list.push({ label: m.label, type: m.type, price: Number(m.price ?? 0) });
+            modsByItem.set(m.order_item_id, list);
+          });
+          normalized.forEach((o) => {
+            o.order_items = o.order_items.map((it) => ({
+              ...it,
+              order_item_modifiers: modsByItem.get(it.id) ?? [],
+            }));
+          });
+        }
+      }
+      setOrders(normalized);
     } catch (err) {
       setToast((err as Error).message || "No se pudo cargar la mesa.");
     } finally {
@@ -121,11 +161,12 @@ export default function CashierTablePage() {
   };
 
   const handlePay = async () => {
-    if (!supabase || !session) return;
+    const client = supabase;
+    if (!client || !session) return;
     setPaying(true);
     setToast(null);
     try {
-      const { error: payError } = await supabase.from("payments").insert([
+      const { error: payError } = await client.from("payments").insert([
         {
           restaurant_id: session.restaurant_id,
           session_id: session.id,
@@ -136,7 +177,7 @@ export default function CashierTablePage() {
       ]);
       if (payError) throw payError;
 
-      const { error: sessUpdateError } = await supabase
+      const { error: sessUpdateError } = await client
         .from("table_sessions")
         .update({
           status: "closed",
@@ -146,7 +187,7 @@ export default function CashierTablePage() {
         .eq("id", session.id);
       if (sessUpdateError) throw sessUpdateError;
 
-      const { error: ordersUpdateError } = await supabase
+      const { error: ordersUpdateError } = await client
         .from("orders")
         .update({ is_paid: true })
         .eq("session_id", session.id);
