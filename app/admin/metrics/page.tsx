@@ -114,14 +114,7 @@ export default function MetricsPage() {
             <h1 className="hero-title">Datos y métricas</h1>
             <p className="hero-copy">Ventas, tickets promedio y horas pico.</p>
             <div style={{ display: "grid", gap: 10, marginTop: 14 }}>
-              <label style={{ fontSize: 13, color: "#6f5b4c" }}>Restaurante</label>
-              <select className="input" value={restaurantId} onChange={(e) => setRestaurantId(e.target.value)}>
-                {restaurants.map((r) => (
-                  <option key={r.id} value={r.id}>
-                    {r.name}
-                  </option>
-                ))}
-              </select>
+              {/* selector de restaurante oculto para despliegue individual */}
               <button className="btn btn-primary" onClick={() => loadData().catch(() => undefined)} disabled={loading}>
                 {loading ? "Cargando..." : "Actualizar"}
               </button>

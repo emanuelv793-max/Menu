@@ -250,14 +250,7 @@ export default function CashierTablePage() {
             <h1 className="hero-title">Mesa {tableNumber}</h1>
             <p className="hero-copy">Detalle de la cuenta y cobro.</p>
             <div style={{ display: "grid", gap: 10, marginTop: 14 }}>
-              <label style={{ fontSize: 13, color: "#6f5b4c" }}>Restaurante</label>
-              <select className="input" value={restaurantId} onChange={(e) => setRestaurantId(e.target.value)}>
-                {restaurants.map((r) => (
-                  <option key={r.id} value={r.id}>
-                    {r.name}
-                  </option>
-                ))}
-              </select>
+              {/* selector de restaurante oculto para despliegue individual */}
               <button className="btn btn-outline btn-small" onClick={() => loadSession().catch(() => undefined)} disabled={loading}>
                 {loading ? "Cargando..." : "Recargar"}
               </button>

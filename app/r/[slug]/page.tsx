@@ -264,7 +264,7 @@ export default function RestaurantPage() {
         <div className="topbar-inner">
           <div className="brand">
             <div className="brand-mark">Menu Lungo</div>
-            <div className="brand-sub">{restaurant?.name ?? "Restaurante"}</div>
+            {/* nombre del restaurante oculto para despliegue individual */}
           </div>
           <Link className="nav-link" href="/admin">
             Cocina

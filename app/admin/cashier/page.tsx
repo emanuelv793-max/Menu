@@ -133,14 +133,7 @@ export default function CashierPage() {
             <h1 className="hero-title">Caja</h1>
             <p className="hero-copy">Gestiona mesas abiertas, cobra y cierra.</p>
             <div style={{ display: "grid", gap: 10, marginTop: 14 }}>
-              <label style={{ fontSize: 13, color: "#6f5b4c" }}>Restaurante</label>
-              <select className="input" value={restaurantId} onChange={(e) => setRestaurantId(e.target.value)}>
-                {restaurants.map((r) => (
-                  <option key={r.id} value={r.id}>
-                    {r.name}
-                  </option>
-                ))}
-              </select>
+              {/* selector de restaurante oculto para despliegue individual */}
 
               <label style={{ fontSize: 13, color: "#6f5b4c" }}>Buscar mesa</label>
               <input
