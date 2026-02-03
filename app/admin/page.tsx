@@ -1,9 +1,9 @@
 ﻿"use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
-import { hasSupabaseConfig, supabase } from "@/lib/supabaseClient";
+import { supabase } from "@/lib/supabaseClient";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import AdminShell from "./_components/AdminShell";
 
 type OrderItem = {
   id: string;
@@ -11,6 +11,18 @@ type OrderItem = {
   qty: number;
   price: number;
   note?: string | null;
+  modifiers?: { label: string; type: "remove" | "extra" }[];
+};
+
+type OrderItemRecord = {
+  id: string;
+  order_id: string;
+  product_id: string;
+  quantity: number;
+  note: string | null;
+  price: number;
+  products?: { name: string | null } | null;
+  order_item_modifiers?: { label: string; type: "remove" | "extra" }[] | null;
 };
 
 type OrderRecord = {
@@ -18,12 +30,7 @@ type OrderRecord = {
   restaurant_id: string;
   table_number: string;
   items?: OrderItem[];
-  order_items?: {
-    product_id: string;
-    quantity: number;
-    note: string | null;
-    price: number;
-  }[];
+  order_items?: OrderItemRecord[];
   total: number;
   status: "enviado" | "preparando" | "listo" | "entregado";
   created_at: string;
@@ -45,15 +52,13 @@ const formatCurrency = (value: number) =>
 const formatTime = (value?: string | null) =>
   value
     ? new Intl.DateTimeFormat("es-ES", {
-        hour: "2-digit",
-        minute: "2-digit",
-      }).format(new Date(value))
+      hour: "2-digit",
+      minute: "2-digit",
+    }).format(new Date(value))
     : "—";
 
 export default function AdminPage() {
-  const router = useRouter();
   const [orders, setOrders] = useState<OrderRecord[]>([]);
-  const [authChecked, setAuthChecked] = useState(false);
   const [audioReady, setAudioReady] = useState(false);
   const [actionStatus, setActionStatus] = useState("");
   const [showServed, setShowServed] = useState(false);
@@ -65,38 +70,50 @@ export default function AdminPage() {
   const beepIntervalRef = useRef<number | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
   const lastBeepRef = useRef(0);
+  const productNameCache = useRef<Map<string, string>>(new Map());
+  const refreshTimerRef = useRef<number | null>(null);
+  const [lastSyncAt, setLastSyncAt] = useState<string>("");
 
-  useEffect(() => {
-    let mounted = true;
+const buildItems = (order: OrderRecord): OrderItem[] => {
+  if (order.items) return order.items;
+  return (
+    order.order_items?.map((i) => ({
+      id: i.id || i.product_id,
+      qty: i.quantity,
+      name: i.products?.name ?? i.product_id,
+      note: i.note,
+      price: i.price,
+      modifiers: (i.order_item_modifiers ?? []).map((m) => ({
+        label: m.label,
+        type: m.type,
+      })),
+    })) ?? []
+  );
+};
 
-    const checkSession = async () => {
-      const client = supabase;
-      if (!client) return;
-      const { data } = await client.auth.getSession();
-      if (!data.session) {
-        router.replace("/login");
-        return;
-      }
-      if (mounted) setAuthChecked(true);
-    };
+const fetchOrderItems = async (db: SupabaseClient, orderId: string) => {
+  const { data } = await db
+    .from("order_items")
+    .select(
+      "id, order_id, product_id, quantity, note, price, products(name), order_item_modifiers(label,type)"
+    )
+    .eq("order_id", orderId);
+  return data as OrderItemRecord[] | null;
+};
 
-    checkSession();
-    const client = supabase;
-    const { data: authListener } = client
-      ? client.auth.onAuthStateChange((_event, session) => {
-          if (!session) {
-            router.replace("/login");
-          } else {
-            setAuthChecked(true);
-          }
-        })
-      : { data: undefined };
-
-    return () => {
-      mounted = false;
-      authListener?.subscription.unsubscribe();
-    };
-  }, [router]);
+const fetchOrderWithItems = async (
+  db: SupabaseClient,
+  id: string
+): Promise<OrderRecord | null> => {
+  const { data } = await db
+    .from("orders")
+    .select(
+        "*, order_items(id, order_id, product_id, quantity, note, price, products(name), order_item_modifiers(label,type))"
+      )
+    .eq("id", id)
+    .single();
+  return (data as OrderRecord) ?? null;
+};
 
   useEffect(() => {
     const enableAudio = async () => {
@@ -130,7 +147,6 @@ export default function AdminPage() {
   }, []);
 
   useEffect(() => {
-    if (!authChecked) return;
     const client = supabase;
     if (!client) return;
     let active = true;
@@ -142,14 +158,16 @@ export default function AdminPage() {
         .order("name");
       if (active && restData) {
         setRestaurants(restData as Restaurant[]);
-        if (restaurantId === "all" && restData.length > 0) {
+        if (restaurantId === "all" && restData.length === 1) {
           setRestaurantId(restData[0].id);
         }
       }
 
       const query = db
         .from("orders")
-        .select("*, order_items(id, product_id, quantity, note, price)")
+        .select(
+          "*, order_items(id, order_id, product_id, quantity, note, price, products(name), order_item_modifiers(label,type))"
+        )
         .order("created_at", { ascending: true });
 
       if (restaurantId !== "all") {
@@ -158,26 +176,64 @@ export default function AdminPage() {
 
       const { data: ordersData } = await query;
       if (active && ordersData) {
-        setOrders(ordersData as unknown as OrderRecord[]);
+        const enriched = await Promise.all(
+          (ordersData as unknown as OrderRecord[]).map(async (order) => {
+            const items =
+              order.order_items && order.order_items.length > 0
+                ? order.order_items
+                : await fetchOrderItems(db, order.id);
+            return { ...order, order_items: items ?? order.order_items };
+          })
+        );
+        setOrders(enriched);
+        setLastSyncAt(new Date().toISOString());
       }
     };
 
     loadData(client);
+
+    if (!refreshTimerRef.current) {
+      refreshTimerRef.current = window.setInterval(() => {
+        if (document.visibilityState !== "visible") return;
+        loadData(client).catch(() => undefined);
+      }, 10_000);
+    }
 
     const channel = client
       .channel("orders-realtime")
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "orders" },
-        (payload) => {
+        async (payload) => {
           if (payload.eventType === "INSERT") {
-            const newOrder = payload.new as OrderRecord;
-            setOrders((prev) => [...prev, newOrder]);
+            const orderId = (payload.new as { id: string }).id;
+            const fullOrder =
+              (await fetchOrderWithItems(client, orderId)) ||
+              ((payload.new as OrderRecord) ?? null);
+            if (!fullOrder) return;
+            setOrders((prev) => [
+              ...prev.filter((order) => order.id !== fullOrder.id),
+              fullOrder,
+            ]);
           }
           if (payload.eventType === "UPDATE") {
             const updated = payload.new as OrderRecord;
+            const full =
+              (await fetchOrderWithItems(client, updated.id)) ?? updated;
+            if (!full.order_items || full.order_items.length === 0) {
+              const items = await fetchOrderItems(client, updated.id);
+              full.order_items = items ?? full.order_items;
+            }
             setOrders((prev) =>
-              prev.map((order) => (order.id === updated.id ? updated : order))
+              prev.map((order) => {
+                if (order.id !== updated.id) return order;
+                const fallbackItems = order.order_items;
+                return {
+                  ...order,
+                  ...full,
+                  order_items: full.order_items?.length ? full.order_items : fallbackItems,
+                };
+              })
             );
           }
           if (payload.eventType === "DELETE") {
@@ -188,13 +244,51 @@ export default function AdminPage() {
           }
         }
       )
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "order_items" },
+        async (payload) => {
+          const item = payload.new as OrderItemRecord;
+          const productId = item.product_id;
+
+          let productName = productNameCache.current.get(productId);
+          if (!productName) {
+            const { data } = await client
+              .from("products")
+              .select("name")
+              .eq("id", productId)
+              .single();
+            productName = data?.name ?? undefined;
+          }
+          const safeName = productName ?? productId;
+          productNameCache.current.set(productId, safeName);
+
+          setOrders((prev) =>
+            prev.map((order) =>
+              order.id === item.order_id
+                ? {
+                  ...order,
+                  order_items: [
+                    ...(order.order_items ?? []),
+                    { ...item, products: { name: safeName } },
+                  ],
+                }
+                : order
+            )
+          );
+        }
+      )
       .subscribe();
 
     return () => {
       active = false;
       channel.unsubscribe();
+      if (refreshTimerRef.current) {
+        window.clearInterval(refreshTimerRef.current);
+        refreshTimerRef.current = null;
+      }
     };
-  }, [authChecked, restaurantId]);
+  }, [restaurantId]);
 
   useEffect(() => {
     const hasNewOrders = orders.some((order) => order.status === "enviado");
@@ -296,7 +390,14 @@ export default function AdminPage() {
 
     if (data) {
       setOrders((prev) =>
-        prev.map((order) => (order.id === id ? (data as OrderRecord) : order))
+        prev.map((order) =>
+          order.id === id
+            ? {
+                ...(data as OrderRecord),
+                order_items: order.order_items,
+              }
+            : order
+        )
       );
     }
   };
@@ -322,46 +423,6 @@ export default function AdminPage() {
     return "order-card status-new";
   };
 
-
-  if (!hasSupabaseConfig) {
-    return (
-      <div className="page">
-        <header className="topbar">
-          <div className="topbar-inner">
-            <div className="brand">
-              <div className="brand-mark">Menu Lungo</div>
-              <div className="brand-sub">Cocina en vivo</div>
-            </div>
-          </div>
-        </header>
-        <main className="container">
-          <p className="status-text">
-            Configura Supabase en <strong>.env.local</strong> para usar la
-            cocina en vivo.
-          </p>
-        </main>
-      </div>
-    );
-  }
-
-  if (!authChecked) {
-    return (
-      <div className="page">
-        <header className="topbar">
-          <div className="topbar-inner">
-            <div className="brand">
-              <div className="brand-mark">Menu Lungo</div>
-              <div className="brand-sub">Cocina en vivo</div>
-            </div>
-          </div>
-        </header>
-        <main className="container">
-          <p className="status-text">Verificando acceso...</p>
-        </main>
-      </div>
-    );
-  }
-
   const filtered = sortedOrders.filter((order) => {
     const okRestaurant =
       restaurantId === "all" ? true : order.restaurant_id === restaurantId;
@@ -374,25 +435,7 @@ export default function AdminPage() {
   const servedOrders = filtered.filter((order) => order.status === "entregado");
 
   return (
-    <div className="page">
-      <header className="topbar">
-        <div className="topbar-inner">
-          <div className="brand">
-            <div className="brand-mark">Menu Lungo</div>
-            <div className="brand-sub">Cocina en vivo</div>
-          </div>
-          <button
-            className="nav-link"
-            onClick={async () => {
-              await supabase?.auth.signOut();
-              router.replace("/login");
-            }}
-          >
-            Cerrar sesión
-          </button>
-        </div>
-      </header>
-
+    <AdminShell>
       <main className="container">
         <section className="hero">
           <div className="hero-card">
@@ -407,7 +450,7 @@ export default function AdminPage() {
             <p className="hero-copy">
               {orders.length === 0
                 ? "Sin pedidos en cola todavía."
-                : `Pedidos activos: ${orders.length}`}
+                : `Activos: ${activeOrders.length} · Servidos: ${servedOrders.length}`}
             </p>
             <div style={{ display: "grid", gap: 10, marginTop: 12 }}>
               <label style={{ fontSize: 13, color: "#6f5b4c" }}>
@@ -442,6 +485,47 @@ export default function AdminPage() {
                 <option value="entregado">Entregado</option>
               </select>
             </div>
+            <div className="admin-toolbar">
+              <div className="pill">
+                Última sync:{" "}
+                {lastSyncAt
+                  ? new Intl.DateTimeFormat("es-ES", {
+                      hour: "2-digit",
+                      minute: "2-digit",
+                      second: "2-digit",
+                    }).format(new Date(lastSyncAt))
+                  : "—"}
+              </div>
+              <button
+                className="btn btn-outline btn-small"
+                onClick={async () => {
+                  setActionStatus("");
+                  const client = supabase;
+                  if (!client) return;
+                  try {
+                    const query = client
+                      .from("orders")
+                      .select(
+                        "*, order_items(id, order_id, product_id, quantity, note, price, products(name))"
+                      )
+                      .order("created_at", { ascending: true });
+                    if (restaurantId !== "all") {
+                      query.eq("restaurant_id", restaurantId);
+                    }
+                    const { data, error } = await query;
+                    if (error) throw error;
+                    setOrders(data as unknown as OrderRecord[]);
+                    setLastSyncAt(new Date().toISOString());
+                  } catch (err) {
+                    setActionStatus(
+                      `No se pudo refrescar: ${(err as Error).message || "error"}`
+                    );
+                  }
+                }}
+              >
+                Refrescar
+              </button>
+            </div>
           </div>
         </section>
 
@@ -451,9 +535,12 @@ export default function AdminPage() {
           </p>
         ) : null}
         {actionStatus ? (
-          <p className="status-text" style={{ marginTop: 8 }}>
+          <div
+            className={`toast ${/no se pudo/i.test(actionStatus) ? "error" : ""}`}
+            style={{ marginTop: 10 }}
+          >
             {actionStatus}
-          </p>
+          </div>
         ) : null}
 
         {activeOrders.length === 0 ? (
@@ -477,23 +564,34 @@ export default function AdminPage() {
                 </div>
 
                 <div className="order-items">
-                  {(order.items ??
-                    order.order_items?.map((i) => ({
-                      id: i.product_id,
-                      qty: i.quantity,
-                      name: i.product_id,
-                      note: i.note,
-                    })) ??
-                    []
-                  ).map((item) => (
-                    <div key={item.id}>
-                      {item.qty} × {item.name}
-                      {item.note ? ` · ${item.note}` : ""}
-                    </div>
-                  ))}
+                  {buildItems(order).map((item) => {
+                    const modLines = (item.modifiers ?? []).map((m) =>
+                      `${m.type === "extra" ? "+" : "-"} ${m.label}`
+                    );
+                    const hasMods = modLines.length > 0 || Boolean(item.note);
+                    return (
+                      <div
+                        key={item.id}
+                        style={
+                          hasMods
+                            ? {
+                                background: "rgba(255, 242, 221, 0.9)",
+                                borderRadius: 10,
+                                padding: "6px 8px",
+                                marginBottom: 6,
+                              }
+                            : { marginBottom: 6 }
+                        }
+                      >
+                        {item.qty} × {item.name}
+                        {modLines.length > 0 ? ` · ${modLines.join(" · ")}` : ""}
+                        {item.note ? ` · ${item.note}` : ""}
+                      </div>
+                    );
+                  })}
                 </div>
 
-                <div className="menu-price">
+                <div className="status-text" style={{ marginTop: 8 }}>
                   Total: {formatCurrency(order.total)}
                 </div>
 
@@ -583,6 +681,6 @@ export default function AdminPage() {
           </section>
         ) : null}
       </main>
-    </div>
+    </AdminShell>
   );
 }

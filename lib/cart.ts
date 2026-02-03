@@ -3,9 +3,12 @@
 const storage = (key: string, slug: string) => `${key}-${slug}`;
 
 export type CartLine = {
+  id: string;
   productId: string;
   qty: number;
   note?: string;
+  selectedExtras?: string[];
+  selectedExcludes?: string[];
 };
 
 export type CartState = {
@@ -18,7 +21,16 @@ export const loadCart = (slug: string): CartState => {
   const raw = window.localStorage.getItem(storage("cart", slug));
   if (!raw) return { table: "", lines: [] };
   try {
-    return JSON.parse(raw) as CartState;
+    const parsed = JSON.parse(raw) as CartState;
+    const linesWithId = (parsed.lines || []).map((line, idx) => ({
+      id: line.id ?? `${line.productId}-${idx}-${Date.now()}`,
+      productId: line.productId,
+      qty: line.qty,
+      note: line.note,
+      selectedExtras: line.selectedExtras ?? [],
+      selectedExcludes: line.selectedExcludes ?? [],
+    }));
+    return { table: parsed.table || "", lines: linesWithId };
   } catch {
     return { table: "", lines: [] };
   }
