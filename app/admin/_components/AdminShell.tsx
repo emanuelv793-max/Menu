@@ -81,6 +81,7 @@ export default function AdminShell({ children }: { children: ReactNode }) {
 
   const isKitchen = pathname === "/admin";
   const isProducts = pathname?.startsWith("/admin/products");
+  const isCashier = pathname?.startsWith("/admin/cashier");
 
   return (
     <div className="page">
@@ -105,6 +106,13 @@ export default function AdminShell({ children }: { children: ReactNode }) {
             >
               Productos
             </Link>
+            <Link
+              className={`nav-link ${isCashier ? "active" : ""}`}
+              href="/admin/cashier"
+              aria-current={isCashier ? "page" : undefined}
+            >
+              Caja
+            </Link>
             <button
               className="nav-link"
               onClick={async () => {
@@ -121,4 +129,3 @@ export default function AdminShell({ children }: { children: ReactNode }) {
     </div>
   );
 }
-

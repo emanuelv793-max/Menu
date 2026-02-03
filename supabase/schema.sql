@@ -76,6 +76,34 @@ alter table public.order_item_modifiers enable row level security;
 alter publication supabase_realtime add table public.orders;
 alter publication supabase_realtime add table public.order_items;
 
+-- Table sessions (caja)
+create table if not exists public.table_sessions (
+  id uuid primary key default gen_random_uuid(),
+  restaurant_id uuid not null references public.restaurants(id) on delete cascade,
+  table_number text not null,
+  status text not null check (status in ('open','closed')) default 'open',
+  opened_at timestamptz not null default now(),
+  closed_at timestamptz,
+  opened_by uuid,
+  closed_by uuid
+);
+create unique index if not exists table_sessions_open_unique
+  on public.table_sessions(restaurant_id, table_number)
+  where status = 'open';
+alter table public.table_sessions enable row level security;
+
+-- Payments
+create table if not exists public.payments (
+  id uuid primary key default gen_random_uuid(),
+  restaurant_id uuid not null references public.restaurants(id) on delete cascade,
+  session_id uuid not null references public.table_sessions(id) on delete cascade,
+  method text not null check (method in ('cash','card')),
+  amount_total numeric not null,
+  created_at timestamptz not null default now(),
+  created_by uuid
+);
+alter table public.payments enable row level security;
+
 -- RLS enable
 alter table public.restaurants enable row level security;
 alter table public.products enable row level security;

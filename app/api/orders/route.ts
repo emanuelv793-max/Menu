@@ -80,7 +80,39 @@ export async function POST(request: Request) {
 
   const total = items.reduce((sum, item) => sum + item.price * item.quantity, 0);
 
-  // 3) Crear pedido
+  // 3) Obtener/crear sesión de mesa (table_sessions)
+  const sessionClient = supabaseService ?? supabase;
+  const { data: existingSession } = await sessionClient
+    .from("table_sessions")
+    .select("id")
+    .eq("restaurant_id", restaurant.id)
+    .eq("table_number", table)
+    .eq("status", "open")
+    .maybeSingle();
+
+  let sessionId = existingSession?.id;
+  if (!sessionId) {
+    const { data: newSession, error: sessionError } = await sessionClient
+      .from("table_sessions")
+      .insert([
+        {
+          restaurant_id: restaurant.id,
+          table_number: table,
+          status: "open",
+        },
+      ])
+      .select("id")
+      .single();
+    if (sessionError || !newSession?.id) {
+      return NextResponse.json(
+        { message: "No se pudo abrir la sesión de mesa." },
+        { status: 500 }
+      );
+    }
+    sessionId = newSession.id;
+  }
+
+  // 4) Crear pedido asociado a la sesión
   const { data: order, error: orderError } = await supabase
     .from("orders")
     .insert([
@@ -89,6 +121,7 @@ export async function POST(request: Request) {
         table_number: table,
         status: "enviado",
         total,
+        session_id: sessionId,
       },
     ])
     .select("id")
