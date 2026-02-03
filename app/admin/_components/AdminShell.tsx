@@ -82,6 +82,7 @@ export default function AdminShell({ children }: { children: ReactNode }) {
   const isKitchen = pathname === "/admin";
   const isProducts = pathname?.startsWith("/admin/products");
   const isCashier = pathname?.startsWith("/admin/cashier");
+  const isMetrics = pathname?.startsWith("/admin/metrics");
 
   return (
     <div className="page">
@@ -112,6 +113,13 @@ export default function AdminShell({ children }: { children: ReactNode }) {
               aria-current={isCashier ? "page" : undefined}
             >
               Caja
+            </Link>
+            <Link
+              className={`nav-link ${isMetrics ? "active" : ""}`}
+              href="/admin/metrics"
+              aria-current={isMetrics ? "page" : undefined}
+            >
+              Datos
             </Link>
             <button
               className="nav-link"

@@ -33,6 +33,13 @@ type Order = {
   order_items: OrderItem[];
 };
 
+type Payment = {
+  id: string;
+  method: "cash" | "card";
+  amount_total: number;
+  created_at: string;
+};
+
 const currency = (n: number) =>
   new Intl.NumberFormat("es-ES", { style: "currency", currency: "EUR" }).format(n);
 
@@ -45,11 +52,15 @@ export default function CashierTablePage() {
   const [restaurantId, setRestaurantId] = useState<string>("");
   const [session, setSession] = useState<Session | null>(null);
   const [orders, setOrders] = useState<Order[]>([]);
+  const [payments, setPayments] = useState<Payment[]>([]);
   const [loading, setLoading] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [showPay, setShowPay] = useState(false);
   const [paying, setPaying] = useState(false);
   const [method, setMethod] = useState<"cash" | "card">("cash");
+  const [amount, setAmount] = useState<string>("0");
+  const [splitParts, setSplitParts] = useState<string>("2");
+  const [selectedItems, setSelectedItems] = useState<Record<string, boolean>>({});
   const [userId, setUserId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -138,6 +149,14 @@ export default function CashierTablePage() {
         }
       }
       setOrders(normalized);
+
+      const { data: paymentsData, error: paymentsError } = await client
+        .from("payments")
+        .select("id, method, amount_total, created_at")
+        .eq("session_id", session.id)
+        .order("created_at", { ascending: true });
+      if (paymentsError) throw paymentsError;
+      setPayments((paymentsData ?? []) as Payment[]);
     } catch (err) {
       setToast((err as Error).message || "No se pudo cargar la mesa.");
     } finally {
@@ -156,6 +175,13 @@ export default function CashierTablePage() {
       .reduce((sum, it) => sum + Number(it.price) * Number(it.quantity), 0);
   }, [orders]);
 
+  const paidTotal = useMemo(
+    () => payments.reduce((sum, p) => sum + Number(p.amount_total), 0),
+    [payments]
+  );
+
+  const remaining = useMemo(() => Math.max(0, total - paidTotal), [total, paidTotal]);
+
   const printTicket = () => {
     window.print();
   };
@@ -166,35 +192,49 @@ export default function CashierTablePage() {
     setPaying(true);
     setToast(null);
     try {
+      const amountNumber = Number(String(amount).replace(",", "."));
+      if (!Number.isFinite(amountNumber) || amountNumber <= 0) {
+        throw new Error("Monto inválido.");
+      }
+      if (amountNumber > remaining + 0.01) {
+        throw new Error("El monto supera lo pendiente.");
+      }
       const { error: payError } = await client.from("payments").insert([
         {
           restaurant_id: session.restaurant_id,
           session_id: session.id,
           method,
-          amount_total: total,
+          amount_total: amountNumber,
           created_by: userId,
         },
       ]);
       if (payError) throw payError;
 
-      const { error: sessUpdateError } = await client
-        .from("table_sessions")
-        .update({
-          status: "closed",
-          closed_at: new Date().toISOString(),
-          closed_by: userId,
-        })
-        .eq("id", session.id);
-      if (sessUpdateError) throw sessUpdateError;
+      const newPaidTotal = paidTotal + amountNumber;
+      if (newPaidTotal >= total - 0.01) {
+        const { error: sessUpdateError } = await client
+          .from("table_sessions")
+          .update({
+            status: "closed",
+            closed_at: new Date().toISOString(),
+            closed_by: userId,
+          })
+          .eq("id", session.id);
+        if (sessUpdateError) throw sessUpdateError;
 
-      const { error: ordersUpdateError } = await client
-        .from("orders")
-        .update({ is_paid: true })
-        .eq("session_id", session.id);
-      if (ordersUpdateError) throw ordersUpdateError;
+        const { error: ordersUpdateError } = await client
+          .from("orders")
+          .update({ is_paid: true })
+          .eq("session_id", session.id);
+        if (ordersUpdateError) throw ordersUpdateError;
+      }
 
-      setToast("Pago registrado y mesa cerrada.");
-      router.push("/admin/cashier");
+      setToast(newPaidTotal >= total - 0.01 ? "Pago registrado y mesa cerrada." : "Pago parcial registrado.");
+      setShowPay(false);
+      await loadSession();
+      if (newPaidTotal >= total - 0.01) {
+        router.push("/admin/cashier");
+      }
     } catch (err) {
       setToast((err as Error).message || "No se pudo registrar el pago.");
     } finally {
@@ -268,11 +308,21 @@ export default function CashierTablePage() {
                     <strong>Total</strong>
                     <span className="menu-price">{currency(total)}</span>
                   </div>
+                  <div className="status-text" style={{ marginTop: 6 }}>
+                    Pagado: {currency(paidTotal)} · Pendiente: {currency(remaining)}
+                  </div>
                   <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
                     <button className="btn btn-outline" onClick={printTicket}>
                       Imprimir ticket
                     </button>
-                    <button className="btn btn-primary" onClick={() => setShowPay(true)} disabled={paying}>
+                    <button
+                      className="btn btn-primary"
+                      onClick={() => {
+                        setAmount(remaining.toFixed(2));
+                        setShowPay(true);
+                      }}
+                      disabled={paying || remaining <= 0}
+                    >
                       Cobrar
                     </button>
                   </div>
@@ -287,7 +337,7 @@ export default function CashierTablePage() {
         <div className="modal-backdrop">
           <div className="modal">
             <h3>Cobrar mesa {tableNumber}</h3>
-            <p>Total: {currency(total)}</p>
+            <p>Total: {currency(total)} · Pendiente: {currency(remaining)}</p>
             <div style={{ display: "flex", gap: 10, margin: "10px 0" }}>
               <button
                 className={`btn btn-outline ${method === "cash" ? "active" : ""}`}
@@ -302,11 +352,77 @@ export default function CashierTablePage() {
                 Tarjeta
               </button>
             </div>
-            <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+            <label style={{ fontSize: 13 }}>Monto a cobrar</label>
+            <input
+              className="input"
+              value={amount}
+              inputMode="decimal"
+              onChange={(e) => setAmount(e.target.value)}
+            />
+            <div style={{ marginTop: 12 }}>
+              <div style={{ fontWeight: 700, marginBottom: 6 }}>Dividir cuenta</div>
+              <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                <input
+                  className="input"
+                  style={{ maxWidth: 120 }}
+                  inputMode="numeric"
+                  value={splitParts}
+                  onChange={(e) => setSplitParts(e.target.value)}
+                />
+                <button
+                  className="btn btn-outline btn-small"
+                  onClick={() => {
+                    const parts = Math.max(1, Number(splitParts));
+                    if (!Number.isFinite(parts)) return;
+                    setAmount((remaining / parts).toFixed(2));
+                  }}
+                >
+                  Partes iguales
+                </button>
+              </div>
+              <div style={{ marginTop: 10 }}>
+                <div style={{ fontWeight: 700, marginBottom: 6 }}>Por ítems</div>
+                <div style={{ display: "grid", gap: 6 }}>
+                  {orders.flatMap((o) => o.order_items).map((it) => {
+                    const key = it.id;
+                    const checked = Boolean(selectedItems[key]);
+                    return (
+                      <label key={key} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={(e) =>
+                            setSelectedItems((prev) => ({ ...prev, [key]: e.target.checked }))
+                          }
+                        />
+                        <span>
+                          {it.quantity} × {it.products?.name ?? "Producto"} ({currency(Number(it.price) * Number(it.quantity))})
+                        </span>
+                      </label>
+                    );
+                  })}
+                </div>
+                <button
+                  className="btn btn-outline btn-small"
+                  style={{ marginTop: 8 }}
+                  onClick={() => {
+                    const items = orders.flatMap((o) => o.order_items);
+                    const sum = items.reduce((acc, it) => {
+                      if (!selectedItems[it.id]) return acc;
+                      return acc + Number(it.price) * Number(it.quantity);
+                    }, 0);
+                    if (sum > 0) setAmount(sum.toFixed(2));
+                  }}
+                >
+                  Cobrar ítems seleccionados
+                </button>
+              </div>
+            </div>
+            <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 12 }}>
               <button className="btn btn-outline" onClick={() => setShowPay(false)} disabled={paying}>
                 Cancelar
               </button>
-              <button className="btn btn-primary" onClick={handlePay} disabled={paying || total <= 0}>
+              <button className="btn btn-primary" onClick={handlePay} disabled={paying || remaining <= 0}>
                 {paying ? "Registrando..." : "Confirmar cobro"}
               </button>
             </div>

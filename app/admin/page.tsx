@@ -196,7 +196,7 @@ const fetchOrderWithItems = async (
       refreshTimerRef.current = window.setInterval(() => {
         if (document.visibilityState !== "visible") return;
         loadData(client).catch(() => undefined);
-      }, 10_000);
+      }, 5_000);
     }
 
     const channel = client

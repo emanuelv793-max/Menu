@@ -43,9 +43,10 @@ export default function CashierPage() {
   const [toast, setToast] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!supabase) return;
+    const client = supabase;
+    if (!client) return;
     const loadRestaurants = async () => {
-      const { data, error } = await supabase.from("restaurants").select("id,name,slug").order("name");
+      const { data, error } = await client.from("restaurants").select("id,name,slug").order("name");
       if (error) {
         setToast("No se pudieron cargar los restaurantes.");
         return;
@@ -59,11 +60,12 @@ export default function CashierPage() {
   }, []);
 
   const loadSessions = async () => {
-    if (!supabase || !restaurantId) return;
+    const client = supabase;
+    if (!client || !restaurantId) return;
     setLoading(true);
     setToast(null);
     try {
-      const { data: sessionData, error: sessionError } = await supabase
+      const { data: sessionData, error: sessionError } = await client
         .from("table_sessions")
         .select("id, restaurant_id, table_number, status, opened_at, closed_at")
         .eq("restaurant_id", restaurantId)
@@ -76,7 +78,7 @@ export default function CashierPage() {
         return;
       }
       const ids = sessions.map((s) => s.id);
-      const { data: ordersData, error: ordersError } = await supabase
+      const { data: ordersData, error: ordersError } = await client
         .from("orders")
         .select("id, session_id, status, is_paid, created_at, order_items(quantity,price)")
         .in("session_id", ids);
@@ -104,6 +106,16 @@ export default function CashierPage() {
 
   useEffect(() => {
     loadSessions().catch(() => undefined);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [restaurantId]);
+
+  useEffect(() => {
+    if (!supabase) return;
+    const id = window.setInterval(() => {
+      if (document.visibilityState !== "visible") return;
+      loadSessions().catch(() => undefined);
+    }, 7_000);
+    return () => window.clearInterval(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [restaurantId]);
 
