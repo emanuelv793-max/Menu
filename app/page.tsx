@@ -1,17 +1,19 @@
-import { redirect } from "next/navigation";
-import { supabaseServer } from "@/lib/supabaseServer";
+﻿import type { Metadata } from "next";
+import Landing from "./_components/Landing";
 
-export default async function Home() {
-  const supabase = supabaseServer();
-  const { data, error } = await supabase
-    .from("restaurants")
-    .select("slug")
-    .order("name", { ascending: true })
-    .limit(1);
+export const metadata: Metadata = {
+  title: "Domus | Pedidos desde mesa directo a cocina",
+  description: "Convierte tu QR en pedidos a cocina. Piloto gratis 15 días.",
+  openGraph: {
+    title: "Domus | Pedidos desde mesa directo a cocina",
+    description: "Convierte tu QR en pedidos a cocina. Piloto gratis 15 días.",
+  },
+};
 
-  if (error || !data || data.length === 0) {
-    throw new Error("No hay restaurantes configurados.");
-  }
+const demoHref = `/r/${
+  process.env.NEXT_PUBLIC_DEFAULT_RESTAURANT_SLUG ?? "domus"
+}`;
 
-  redirect(`/r/${data[0].slug}`);
+export default function Home() {
+  return <Landing demoHref={demoHref} />;
 }

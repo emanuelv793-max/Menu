@@ -1,6 +1,6 @@
 ﻿"use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import AdminShell from "./_components/AdminShell";
@@ -11,7 +11,7 @@ type OrderItem = {
   qty: number;
   price: number;
   note?: string | null;
-  modifiers?: { label: string; type: "remove" | "extra" }[];
+  modifiers?: { label: string; type: "remove" | "extra"; price?: number }[];
 };
 
 type OrderItemRecord = {
@@ -22,7 +22,14 @@ type OrderItemRecord = {
   note: string | null;
   price: number;
   products?: { name: string | null } | null;
-  order_item_modifiers?: { label: string; type: "remove" | "extra" }[] | null;
+  order_item_modifiers?: { label: string; type: "remove" | "extra"; price?: number }[] | null;
+};
+
+type OrderItemModifierRecord = {
+  order_item_id: string;
+  label: string;
+  type: "remove" | "extra";
+  price: number;
 };
 
 type OrderRecord = {
@@ -37,11 +44,14 @@ type OrderRecord = {
   served_at?: string | null;
 };
 
-type Restaurant = {
+type RestaurantScope = {
   id: string;
-  name: string;
   slug: string;
 };
+
+const DEFAULT_RESTAURANT_SLUG =
+  process.env.NEXT_PUBLIC_DEFAULT_RESTAURANT_SLUG ?? "domus";
+const AUTO_REFRESH_MS = 4_000;
 
 const formatCurrency = (value: number) =>
   new Intl.NumberFormat("es-ES", {
@@ -62,8 +72,6 @@ export default function AdminPage() {
   const [audioReady, setAudioReady] = useState(false);
   const [actionStatus, setActionStatus] = useState("");
   const [showServed, setShowServed] = useState(false);
-  const [restaurants, setRestaurants] = useState<Restaurant[]>([]);
-  const [restaurantId, setRestaurantId] = useState<string | "all">("all");
   const [statusFilter, setStatusFilter] = useState<
     "all" | "enviado" | "preparando" | "listo" | "entregado"
   >("all");
@@ -72,6 +80,7 @@ export default function AdminPage() {
   const lastBeepRef = useRef(0);
   const productNameCache = useRef<Map<string, string>>(new Map());
   const refreshTimerRef = useRef<number | null>(null);
+  const restaurantScopeIdRef = useRef<string | null | undefined>(undefined);
   const [lastSyncAt, setLastSyncAt] = useState<string>("");
 
 const buildItems = (order: OrderRecord): OrderItem[] => {
@@ -86,34 +95,122 @@ const buildItems = (order: OrderRecord): OrderItem[] => {
       modifiers: (i.order_item_modifiers ?? []).map((m) => ({
         label: m.label,
         type: m.type,
+        price: m.price,
       })),
     })) ?? []
   );
 };
 
-const fetchOrderItems = async (db: SupabaseClient, orderId: string) => {
-  const { data } = await db
-    .from("order_items")
-    .select(
-      "id, order_id, product_id, quantity, note, price, products(name), order_item_modifiers(label,type)"
-    )
-    .eq("order_id", orderId);
-  return data as OrderItemRecord[] | null;
-};
+  const fetchOrderItems = useCallback(async (db: SupabaseClient, orderId: string) => {
+    const { data } = await db
+      .from("order_items")
+      .select("id, order_id, product_id, quantity, note, price, products(name)")
+      .eq("order_id", orderId);
+    return data as OrderItemRecord[] | null;
+  }, []);
 
-const fetchOrderWithItems = async (
-  db: SupabaseClient,
-  id: string
-): Promise<OrderRecord | null> => {
-  const { data } = await db
-    .from("orders")
-    .select(
-        "*, order_items(id, order_id, product_id, quantity, note, price, products(name), order_item_modifiers(label,type))"
-      )
-    .eq("id", id)
-    .single();
-  return (data as OrderRecord) ?? null;
-};
+  const fetchOrderItemModifiers = useCallback(
+    async (db: SupabaseClient, orderItemIds: string[]) => {
+      if (orderItemIds.length === 0) return [] as OrderItemModifierRecord[];
+      const { data, error } = await db
+        .from("order_item_modifiers")
+        .select("order_item_id, label, type, price")
+        .in("order_item_id", orderItemIds);
+      if (error || !data) return [] as OrderItemModifierRecord[];
+      return data as OrderItemModifierRecord[];
+    },
+    []
+  );
+
+  const attachModifiersToOrders = useCallback(
+    async (db: SupabaseClient, inputOrders: OrderRecord[]) => {
+      const orderItems = inputOrders.flatMap((order) => order.order_items ?? []);
+      const itemIds = orderItems.map((item) => item.id);
+      const modifiers = await fetchOrderItemModifiers(db, itemIds);
+      if (modifiers.length === 0) return inputOrders;
+
+      const modifiersByItem = new Map<string, OrderItemModifierRecord[]>();
+      modifiers.forEach((modifier) => {
+        const current = modifiersByItem.get(modifier.order_item_id) ?? [];
+        current.push(modifier);
+        modifiersByItem.set(modifier.order_item_id, current);
+      });
+
+      return inputOrders.map((order) => ({
+        ...order,
+        order_items: (order.order_items ?? []).map((item) => ({
+          ...item,
+          order_item_modifiers: (modifiersByItem.get(item.id) ?? []).map((m) => ({
+            label: m.label,
+            type: m.type,
+            price: m.price,
+          })),
+        })),
+      }));
+    },
+    [fetchOrderItemModifiers]
+  );
+
+  const fetchOrderWithItems = useCallback(
+    async (db: SupabaseClient, id: string): Promise<OrderRecord | null> => {
+      const { data } = await db
+        .from("orders")
+        .select("*, order_items(id, order_id, product_id, quantity, note, price, products(name))")
+        .eq("id", id)
+        .single();
+      const order = (data as OrderRecord) ?? null;
+      if (!order) return null;
+      const [withModifiers] = await attachModifiersToOrders(db, [order]);
+      return withModifiers ?? order;
+    },
+    [attachModifiersToOrders]
+  );
+
+  const resolveRestaurantScopeId = useCallback(async (db: SupabaseClient) => {
+    const { data, error } = await db
+      .from("restaurants")
+      .select("id,slug")
+      .order("name");
+    if (error || !data || data.length === 0) return null;
+    const list = data as RestaurantScope[];
+    const preferred = list.find((r) => r.slug === DEFAULT_RESTAURANT_SLUG);
+    return preferred?.id ?? list[0].id;
+  }, []);
+
+  const loadData = useCallback(async () => {
+    const client = supabase;
+    if (!client) return;
+
+    if (restaurantScopeIdRef.current === undefined) {
+      restaurantScopeIdRef.current = await resolveRestaurantScopeId(client);
+    }
+
+    const scopeId = restaurantScopeIdRef.current ?? null;
+    let query = client
+      .from("orders")
+      .select("*, order_items(id, order_id, product_id, quantity, note, price, products(name))")
+      .order("created_at", { ascending: true });
+
+    if (scopeId) {
+      query = query.eq("restaurant_id", scopeId);
+    }
+
+    const { data: ordersData, error: ordersError } = await query;
+    if (ordersError) throw ordersError;
+
+    const enrichedOrders = await Promise.all(
+      ((ordersData ?? []) as OrderRecord[]).map(async (order) => {
+        const items =
+          order.order_items && order.order_items.length > 0
+            ? order.order_items
+            : await fetchOrderItems(client, order.id);
+        return { ...order, order_items: items ?? order.order_items };
+      })
+    );
+    const withModifiers = await attachModifiersToOrders(client, enrichedOrders);
+    setOrders(withModifiers);
+    setLastSyncAt(new Date().toISOString());
+  }, [attachModifiersToOrders, fetchOrderItems, resolveRestaurantScopeId]);
 
   useEffect(() => {
     const enableAudio = async () => {
@@ -151,53 +248,33 @@ const fetchOrderWithItems = async (
     if (!client) return;
     let active = true;
 
-    const loadData = async (db: SupabaseClient) => {
-      const { data: restData } = await db
-        .from("restaurants")
-        .select("id,name,slug")
-        .order("name");
-      if (active && restData) {
-        setRestaurants(restData as Restaurant[]);
-        if (restaurantId === "all" && restData.length === 1) {
-          setRestaurantId(restData[0].id);
-        }
-      }
-
-      const query = db
-        .from("orders")
-        .select(
-          "*, order_items(id, order_id, product_id, quantity, note, price, products(name), order_item_modifiers(label,type))"
-        )
-        .order("created_at", { ascending: true });
-
-      if (restaurantId !== "all") {
-        query.eq("restaurant_id", restaurantId);
-      }
-
-      const { data: ordersData } = await query;
-      if (active && ordersData) {
-        const enriched = await Promise.all(
-          (ordersData as unknown as OrderRecord[]).map(async (order) => {
-            const items =
-              order.order_items && order.order_items.length > 0
-                ? order.order_items
-                : await fetchOrderItems(db, order.id);
-            return { ...order, order_items: items ?? order.order_items };
-          })
-        );
-        setOrders(enriched);
-        setLastSyncAt(new Date().toISOString());
+    const safeLoad = async () => {
+      try {
+        await loadData();
+        if (active) setActionStatus("");
+      } catch (err) {
+        if (!active) return;
+        setActionStatus(`No se pudo refrescar: ${(err as Error).message || "error"}`);
       }
     };
 
-    loadData(client);
+    const onVisibleOrFocus = () => {
+      if (document.visibilityState !== "visible") return;
+      safeLoad().catch(() => undefined);
+    };
 
-    if (!refreshTimerRef.current) {
-      refreshTimerRef.current = window.setInterval(() => {
-        if (document.visibilityState !== "visible") return;
-        loadData(client).catch(() => undefined);
-      }, 5_000);
-    }
+    const isOutOfScope = (restaurantId?: string | null) => {
+      const scopeId = restaurantScopeIdRef.current;
+      if (!scopeId) return false;
+      return restaurantId !== scopeId;
+    };
+
+    safeLoad().catch(() => undefined);
+    refreshTimerRef.current = window.setInterval(() => {
+      safeLoad().catch(() => undefined);
+    }, AUTO_REFRESH_MS);
+    document.addEventListener("visibilitychange", onVisibleOrFocus);
+    window.addEventListener("focus", onVisibleOrFocus);
 
     const channel = client
       .channel("orders-realtime")
@@ -206,18 +283,24 @@ const fetchOrderWithItems = async (
         { event: "*", schema: "public", table: "orders" },
         async (payload) => {
           if (payload.eventType === "INSERT") {
-            const orderId = (payload.new as { id: string }).id;
+            const inserted = payload.new as { id: string; restaurant_id?: string };
+            if (isOutOfScope(inserted.restaurant_id)) return;
             const fullOrder =
-              (await fetchOrderWithItems(client, orderId)) ||
+              (await fetchOrderWithItems(client, inserted.id)) ||
               ((payload.new as OrderRecord) ?? null);
             if (!fullOrder) return;
             setOrders((prev) => [
               ...prev.filter((order) => order.id !== fullOrder.id),
               fullOrder,
             ]);
+            setLastSyncAt(new Date().toISOString());
           }
           if (payload.eventType === "UPDATE") {
             const updated = payload.new as OrderRecord;
+            if (isOutOfScope(updated.restaurant_id)) {
+              setOrders((prev) => prev.filter((order) => order.id !== updated.id));
+              return;
+            }
             const full =
               (await fetchOrderWithItems(client, updated.id)) ?? updated;
             if (!full.order_items || full.order_items.length === 0) {
@@ -235,12 +318,15 @@ const fetchOrderWithItems = async (
                 };
               })
             );
+            setLastSyncAt(new Date().toISOString());
           }
           if (payload.eventType === "DELETE") {
             const removed = payload.old as OrderRecord;
+            if (isOutOfScope(removed.restaurant_id)) return;
             setOrders((prev) =>
               prev.filter((order) => order.id !== removed.id)
             );
+            setLastSyncAt(new Date().toISOString());
           }
         }
       )
@@ -267,15 +353,44 @@ const fetchOrderWithItems = async (
             prev.map((order) =>
               order.id === item.order_id
                 ? {
-                  ...order,
-                  order_items: [
-                    ...(order.order_items ?? []),
-                    { ...item, products: { name: safeName } },
-                  ],
-                }
+                    ...order,
+                    order_items: [
+                      ...(order.order_items ?? []),
+                      {
+                        ...item,
+                        products: { name: safeName },
+                        order_item_modifiers: [],
+                      },
+                    ],
+                  }
                 : order
             )
           );
+          setLastSyncAt(new Date().toISOString());
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "order_item_modifiers" },
+        (payload) => {
+          const modifier = payload.new as OrderItemModifierRecord;
+          setOrders((prev) =>
+            prev.map((order) => ({
+              ...order,
+              order_items: (order.order_items ?? []).map((item) =>
+                item.id !== modifier.order_item_id
+                  ? item
+                  : {
+                      ...item,
+                      order_item_modifiers: [
+                        ...(item.order_item_modifiers ?? []),
+                        { label: modifier.label, type: modifier.type, price: modifier.price },
+                      ],
+                    }
+              ),
+            }))
+          );
+          setLastSyncAt(new Date().toISOString());
         }
       )
       .subscribe();
@@ -287,8 +402,10 @@ const fetchOrderWithItems = async (
         window.clearInterval(refreshTimerRef.current);
         refreshTimerRef.current = null;
       }
+      document.removeEventListener("visibilitychange", onVisibleOrFocus);
+      window.removeEventListener("focus", onVisibleOrFocus);
     };
-  }, [restaurantId]);
+  }, [fetchOrderItems, fetchOrderWithItems, loadData]);
 
   useEffect(() => {
     const hasNewOrders = orders.some((order) => order.status === "enviado");
@@ -423,13 +540,9 @@ const fetchOrderWithItems = async (
     return "order-card status-new";
   };
 
-  const filtered = sortedOrders.filter((order) => {
-    const okRestaurant =
-      restaurantId === "all" ? true : order.restaurant_id === restaurantId;
-    const okStatus =
-      statusFilter === "all" ? true : order.status === statusFilter;
-    return okRestaurant && okStatus;
-  });
+  const filtered = sortedOrders.filter((order) =>
+    statusFilter === "all" ? true : order.status === statusFilter
+  );
 
   const activeOrders = filtered.filter((order) => order.status !== "entregado");
   const servedOrders = filtered.filter((order) => order.status === "entregado");
@@ -437,41 +550,27 @@ const fetchOrderWithItems = async (
   return (
     <AdminShell>
       <main className="container">
-        <section className="hero">
-          <div className="hero-card">
-            <h1 className="hero-title">Pedidos en tiempo real</h1>
-            <p className="hero-copy">
-              Actualiza el estado de cada pedido con un toque. Los cambios se
-              reflejan al instante en el salón.
-            </p>
-          </div>
-          <div className="hero-card">
-            <h2 className="section-title">Resumen</h2>
-            <p className="hero-copy">
-              {orders.length === 0
-                ? "Sin pedidos en cola todavía."
-                : `Activos: ${activeOrders.length} · Servidos: ${servedOrders.length}`}
-            </p>
-            <div style={{ display: "grid", gap: 10, marginTop: 12 }}>
-              {/* selector de restaurante oculto para despliegue individual */}
-              <label style={{ fontSize: 13, color: "#6f5b4c" }}>
-                Estado
-              </label>
-              <select
-                className="input"
-                value={statusFilter}
-                onChange={(e) =>
-                  setStatusFilter(e.target.value as typeof statusFilter)
-                }
-              >
-                <option value="all">Todos</option>
-                <option value="enviado">Enviado</option>
-                <option value="preparando">Preparando</option>
-                <option value="listo">Listo</option>
-                <option value="entregado">Entregado</option>
-              </select>
+        <section className="hero" style={{ gap: 14 }}>
+          <div className="hero-card" style={{ flex: "1 1 320px" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
+              <div>
+                <p className="badge badge-new" style={{ marginBottom: 6 }}>Cocina</p>
+                <h1 className="hero-title" style={{ margin: 0 }}>Pedidos en tiempo real</h1>
+              </div>
+              <div className="pill">
+                {audioReady ? "Sonido listo" : "Activa sonido"}
+              </div>
             </div>
-            <div className="admin-toolbar">
+            <p className="hero-copy" style={{ marginTop: 6 }}>
+              Gestiona los tickets en cola y cambia el estado en un solo clic.
+            </p>
+            <div style={{ display: "grid", gap: 10, gridTemplateColumns: "repeat(auto-fit, minmax(180px,1fr))", marginTop: 12 }}>
+              <div className="pill" style={{ background: "rgba(255,132,0,0.08)" }}>
+                Activos: <strong>{activeOrders.length}</strong>
+              </div>
+              <div className="pill" style={{ background: "rgba(34,197,94,0.08)" }}>
+                Servidos hoy: <strong>{servedOrders.length}</strong>
+              </div>
               <div className="pill">
                 Última sync:{" "}
                 {lastSyncAt
@@ -482,35 +581,48 @@ const fetchOrderWithItems = async (
                     }).format(new Date(lastSyncAt))
                   : "—"}
               </div>
-              <button
-                className="btn btn-outline btn-small"
-                onClick={async () => {
-                  setActionStatus("");
-                  const client = supabase;
-                  if (!client) return;
-                  try {
-                    const query = client
-                      .from("orders")
-                      .select(
-                        "*, order_items(id, order_id, product_id, quantity, note, price, products(name))"
-                      )
-                      .order("created_at", { ascending: true });
-                    if (restaurantId !== "all") {
-                      query.eq("restaurant_id", restaurantId);
-                    }
-                    const { data, error } = await query;
-                    if (error) throw error;
-                    setOrders(data as unknown as OrderRecord[]);
-                    setLastSyncAt(new Date().toISOString());
-                  } catch (err) {
-                    setActionStatus(
-                      `No se pudo refrescar: ${(err as Error).message || "error"}`
-                    );
+            </div>
+          </div>
+
+          <div className="hero-card" style={{ flex: "1 1 320px" }}>
+            <h3 className="section-title" style={{ marginTop: 0 }}>Filtros rápidos</h3>
+            <div style={{ display: "grid", gap: 10 }}>
+              <div>
+                <label style={{ fontSize: 13, color: "#6f5b4c" }}>Estado</label>
+                <select
+                  className="input"
+                  value={statusFilter}
+                  onChange={(e) =>
+                    setStatusFilter(e.target.value as typeof statusFilter)
                   }
-                }}
-              >
-                Refrescar
-              </button>
+                >
+                  <option value="all">Todos</option>
+                  <option value="enviado">Enviado</option>
+                  <option value="preparando">Preparando</option>
+                  <option value="listo">Listo</option>
+                  <option value="entregado">Entregado</option>
+                </select>
+              </div>
+              <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+                <button
+                  className="btn btn-outline btn-small"
+                  onClick={async () => {
+                    setActionStatus("");
+                    try {
+                      await loadData();
+                    } catch (err) {
+                      setActionStatus(
+                        `No se pudo refrescar: ${(err as Error).message || "error"}`
+                      );
+                    }
+                  }}
+                >
+                  Refrescar
+                </button>
+                <div className="status-text">
+                  Tiempo real activado (cada 4s)
+                </div>
+              </div>
             </div>
           </div>
         </section>
@@ -551,9 +663,10 @@ const fetchOrderWithItems = async (
 
                 <div className="order-items">
                   {buildItems(order).map((item) => {
-                    const modLines = (item.modifiers ?? []).map((m) =>
-                      `${m.type === "extra" ? "+" : "-"} ${m.label}`
-                    );
+                    const modLines = (item.modifiers ?? []).map((m) => {
+                      const priceTag = m.price ? ` (${formatCurrency(m.price)})` : "";
+                      return `${m.type === "extra" ? "+" : "-"} ${m.label}${priceTag}`;
+                    });
                     const hasMods = modLines.length > 0 || Boolean(item.note);
                     return (
                       <div

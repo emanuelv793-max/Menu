@@ -54,7 +54,26 @@ export default function LoginPage() {
       <header className="topbar">
         <div className="topbar-inner">
           <div className="brand">
-            <div className="brand-mark">Menu Lungo</div>
+            <img
+              className="brand-logo"
+              src="/brand/domus-logo-horizontal.svg"
+              alt="Domus"
+            />
+            <img
+              className="brand-icon brand-icon-default"
+              src="/brand/domus-icon.svg"
+              alt="Domus"
+            />
+            <img
+              className="brand-icon brand-icon-dark"
+              src="/brand/domus-icon-dark.svg"
+              alt="Domus"
+            />
+            <img
+              className="brand-icon brand-icon-light"
+              src="/brand/domus-icon-light.svg"
+              alt="Domus"
+            />
             <div className="brand-sub">Acceso cocina</div>
           </div>
           <Link className="nav-link" href="/">

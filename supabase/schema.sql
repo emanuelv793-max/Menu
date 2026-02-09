@@ -18,6 +18,7 @@ create table if not exists public.products (
   category text,
   extras jsonb not null default '[]'::jsonb,
   excludes jsonb not null default '[]'::jsonb,
+  is_active boolean not null default true,
   created_at timestamptz not null default now()
 );
 create index if not exists products_restaurant_idx on public.products (restaurant_id);
@@ -104,6 +105,54 @@ create table if not exists public.payments (
 );
 alter table public.payments enable row level security;
 
+-- App error logs
+create table if not exists public.app_error_logs (
+  id uuid primary key default gen_random_uuid(),
+  level text not null default 'error',
+  source text not null,
+  message text not null,
+  detail text,
+  url text,
+  context jsonb,
+  created_at timestamptz not null default now()
+);
+alter table public.app_error_logs enable row level security;
+
+-- User roles
+create table if not exists public.user_roles (
+  user_id uuid primary key references auth.users(id) on delete cascade,
+  role text not null check (role in ('admin','staff')),
+  created_at timestamptz not null default now()
+);
+alter table public.user_roles enable row level security;
+
+-- Role helpers
+create or replace function public.is_admin()
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select exists(
+    select 1 from public.user_roles
+    where user_id = auth.uid() and role = 'admin'
+  );
+$$;
+
+create or replace function public.is_staff()
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select exists(
+    select 1 from public.user_roles
+    where user_id = auth.uid() and role in ('admin','staff')
+  );
+$$;
+
 -- RLS enable
 alter table public.restaurants enable row level security;
 alter table public.products enable row level security;
@@ -135,27 +184,213 @@ begin
       to anon, authenticated
       using (true);
   end if;
-  if not exists (select 1 from pg_policies where policyname = 'product_modifiers_insert_auth') then
-    create policy "product_modifiers_insert_auth"
+  if not exists (select 1 from pg_policies where policyname = 'product_modifiers_insert_admin') then
+    create policy "product_modifiers_insert_admin"
       on public.product_modifiers
       for insert
       to authenticated
-      with check (true);
+      with check (public.is_admin());
   end if;
-  if not exists (select 1 from pg_policies where policyname = 'product_modifiers_update_auth') then
-    create policy "product_modifiers_update_auth"
+  if not exists (select 1 from pg_policies where policyname = 'product_modifiers_update_admin') then
+    create policy "product_modifiers_update_admin"
       on public.product_modifiers
       for update
       to authenticated
-      using (true)
-      with check (true);
+      using (public.is_admin())
+      with check (public.is_admin());
   end if;
-  if not exists (select 1 from pg_policies where policyname = 'product_modifiers_delete_auth') then
-    create policy "product_modifiers_delete_auth"
+  if not exists (select 1 from pg_policies where policyname = 'product_modifiers_delete_admin') then
+    create policy "product_modifiers_delete_admin"
       on public.product_modifiers
       for delete
       to authenticated
-      using (true);
+      using (public.is_admin());
+  end if;
+end $$;
+
+-- orders: staff/admin access
+do $$
+begin
+  if not exists (select 1 from pg_policies where policyname = 'orders_select_staff') then
+    create policy "orders_select_staff"
+      on public.orders
+      for select
+      to authenticated
+      using (public.is_staff());
+  end if;
+  if not exists (select 1 from pg_policies where policyname = 'orders_insert_staff') then
+    create policy "orders_insert_staff"
+      on public.orders
+      for insert
+      to authenticated
+      with check (public.is_staff());
+  end if;
+  if not exists (select 1 from pg_policies where policyname = 'orders_update_staff') then
+    create policy "orders_update_staff"
+      on public.orders
+      for update
+      to authenticated
+      using (public.is_staff())
+      with check (public.is_staff());
+  end if;
+end $$;
+
+-- order_items: staff/admin access
+do $$
+begin
+  if not exists (select 1 from pg_policies where policyname = 'order_items_select_staff') then
+    create policy "order_items_select_staff"
+      on public.order_items
+      for select
+      to authenticated
+      using (public.is_staff());
+  end if;
+  if not exists (select 1 from pg_policies where policyname = 'order_items_insert_staff') then
+    create policy "order_items_insert_staff"
+      on public.order_items
+      for insert
+      to authenticated
+      with check (public.is_staff());
+  end if;
+end $$;
+
+-- order_item_modifiers: staff/admin access
+do $$
+begin
+  if to_regclass('public.order_item_modifiers') is not null then
+    if not exists (select 1 from pg_policies where policyname = 'order_item_modifiers_select_staff') then
+      create policy "order_item_modifiers_select_staff"
+        on public.order_item_modifiers
+        for select
+        to authenticated
+        using (public.is_staff());
+    end if;
+    if not exists (select 1 from pg_policies where policyname = 'order_item_modifiers_insert_staff') then
+      create policy "order_item_modifiers_insert_staff"
+        on public.order_item_modifiers
+        for insert
+        to authenticated
+        with check (public.is_staff());
+    end if;
+  end if;
+end $$;
+
+-- table_sessions: staff/admin access
+do $$
+begin
+  if not exists (select 1 from pg_policies where policyname = 'table_sessions_select_staff') then
+    create policy "table_sessions_select_staff"
+      on public.table_sessions
+      for select
+      to authenticated
+      using (public.is_staff());
+  end if;
+  if not exists (select 1 from pg_policies where policyname = 'table_sessions_insert_staff') then
+    create policy "table_sessions_insert_staff"
+      on public.table_sessions
+      for insert
+      to authenticated
+      with check (public.is_staff());
+  end if;
+  if not exists (select 1 from pg_policies where policyname = 'table_sessions_update_staff') then
+    create policy "table_sessions_update_staff"
+      on public.table_sessions
+      for update
+      to authenticated
+      using (public.is_staff())
+      with check (public.is_staff());
+  end if;
+end $$;
+
+-- payments: staff/admin access
+do $$
+begin
+  if not exists (select 1 from pg_policies where policyname = 'payments_select_staff') then
+    create policy "payments_select_staff"
+      on public.payments
+      for select
+      to authenticated
+      using (public.is_staff());
+  end if;
+  if not exists (select 1 from pg_policies where policyname = 'payments_insert_staff') then
+    create policy "payments_insert_staff"
+      on public.payments
+      for insert
+      to authenticated
+      with check (public.is_staff());
+  end if;
+end $$;
+
+-- app_error_logs: admin read
+do $$
+begin
+  if not exists (select 1 from pg_policies where policyname = 'app_error_logs_select_admin') then
+    create policy "app_error_logs_select_admin"
+      on public.app_error_logs
+      for select
+      to authenticated
+      using (public.is_admin());
+  end if;
+end $$;
+
+-- products: admin write (public read)
+do $$
+begin
+  if not exists (select 1 from pg_policies where policyname = 'products_insert_admin') then
+    create policy "products_insert_admin"
+      on public.products
+      for insert
+      to authenticated
+      with check (public.is_admin());
+  end if;
+  if not exists (select 1 from pg_policies where policyname = 'products_update_admin') then
+    create policy "products_update_admin"
+      on public.products
+      for update
+      to authenticated
+      using (public.is_admin())
+      with check (public.is_admin());
+  end if;
+  if not exists (select 1 from pg_policies where policyname = 'products_delete_admin') then
+    create policy "products_delete_admin"
+      on public.products
+      for delete
+      to authenticated
+      using (public.is_admin());
+  end if;
+end $$;
+
+-- user_roles: self read + admin manage
+do $$
+begin
+  if not exists (select 1 from pg_policies where policyname = 'user_roles_select_own') then
+    create policy "user_roles_select_own"
+      on public.user_roles
+      for select
+      to authenticated
+      using (auth.uid() = user_id);
+  end if;
+  if not exists (select 1 from pg_policies where policyname = 'user_roles_admin_manage') then
+    create policy "user_roles_admin_manage"
+      on public.user_roles
+      for insert
+      to authenticated
+      with check (public.is_admin());
+  end if;
+  if not exists (select 1 from pg_policies where policyname = 'user_roles_admin_manage_update') then
+    create policy "user_roles_admin_manage_update"
+      on public.user_roles
+      for update
+      to authenticated
+      using (public.is_admin())
+      with check (public.is_admin());
+  end if;
+  if not exists (select 1 from pg_policies where policyname = 'user_roles_admin_manage_delete') then
+    create policy "user_roles_admin_manage_delete"
+      on public.user_roles
+      for delete
+      to authenticated
+      using (public.is_admin());
   end if;
 end $$;
 

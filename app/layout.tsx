@@ -16,9 +16,13 @@ const sans = Sora({
 });
 
 export const metadata: Metadata = {
-  title: "Menu Lungo | Restaurante",
+  title: "Domus | Pedidos desde mesa directo a cocina",
   description:
     "Experiencia de pedido en mesa y panel de cocina en tiempo real.",
+  icons: {
+    icon: "/favicon.ico",
+    apple: "/apple-touch-icon.png",
+  },
 };
 
 export default function RootLayout({
@@ -28,7 +32,10 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="es">
-      <body className={`${sans.variable} ${display.variable} antialiased`}>
+      <body
+        className={`${sans.variable} ${display.variable} antialiased`}
+        suppressHydrationWarning
+      >
         {children}
         <SpeedInsights />
       </body>

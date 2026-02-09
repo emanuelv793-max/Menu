@@ -34,7 +34,6 @@ type SessionWithTotals = TableSession & {
 };
 
 export default function CashierPage() {
-  const [restaurants, setRestaurants] = useState<Restaurant[]>([]);
   const [restaurantId, setRestaurantId] = useState<string>("");
   const [sessions, setSessions] = useState<SessionWithTotals[]>([]);
   const [filter, setFilter] = useState<"open" | "closed">("open");
@@ -52,7 +51,6 @@ export default function CashierPage() {
         return;
       }
       const list = (data ?? []) as Restaurant[];
-      setRestaurants(list);
       if (!restaurantId && list.length > 0) setRestaurantId(list[0].id);
     };
     loadRestaurants().catch(() => undefined);

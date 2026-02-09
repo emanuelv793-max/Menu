@@ -50,7 +50,8 @@ export async function POST(request: Request) {
   const { data: products, error: productsError } = await supabase
     .from("products")
     .select("id, price")
-    .in("id", productIds);
+    .in("id", productIds)
+    .eq("is_active", true);
 
   if (productsError || !products || products.length === 0) {
     return NextResponse.json({ message: "No se pudieron cargar los productos." }, { status: 400 });
@@ -66,14 +67,15 @@ export async function POST(request: Request) {
       type: m.type,
       price: Number(m.price ?? 0),
     }));
-    const extraSum = modifiers
-      .filter((m) => m.type === "extra")
-      .reduce((sum, m) => sum + (Number.isFinite(m.price) ? m.price : 0), 0);
+    const modifiersTotal = modifiers.reduce(
+      (sum, m) => sum + (Number.isFinite(m.price) ? m.price : 0),
+      0
+    );
     return {
       product_id: item.productId,
       quantity: item.qty,
       note: item.note ?? null,
-      price: basePrice + extraSum,
+      price: basePrice + modifiersTotal,
       modifiers,
     };
   });

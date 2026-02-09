@@ -5,6 +5,39 @@ import { supabaseService } from "@/lib/supabaseService";
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
 const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "";
 
+type OptionInput =
+  | string
+  | {
+      label?: string | null;
+      price?: number | string | null;
+    };
+
+type OptionValue = {
+  label: string;
+  price: number;
+};
+
+const normalizeOptions = (raw?: OptionInput[] | null): OptionValue[] => {
+  const entries = Array.isArray(raw) ? raw : [];
+  const map = new Map<string, OptionValue>();
+  for (const entry of entries) {
+    if (typeof entry === "string") {
+      const label = entry.trim();
+      if (!label) continue;
+      map.set(label, { label, price: 0 });
+      continue;
+    }
+    if (entry && typeof entry === "object") {
+      const label = String(entry.label ?? "").trim();
+      if (!label) continue;
+      const price = Number(entry.price ?? 0);
+      const safePrice = Number.isFinite(price) && price >= 0 ? price : 0;
+      map.set(label, { label, price: safePrice });
+    }
+  }
+  return Array.from(map.values());
+};
+
 const requireUser = async (request: Request) => {
   const authHeader = request.headers.get("authorization") ?? "";
   const token = authHeader.startsWith("Bearer ")
@@ -37,15 +70,19 @@ export async function GET(request: Request) {
   const url = new URL(request.url);
   const restaurantId = url.searchParams.get("restaurantId") ?? "";
   const q = (url.searchParams.get("q") ?? "").trim();
+  const category = (url.searchParams.get("category") ?? "").trim();
 
   let query = supabaseService
     .from("products")
-    .select("id, restaurant_id, name, description, price, image_url, category, extras, excludes, created_at")
+    .select(
+      "id, restaurant_id, name, description, price, image_url, category, extras, excludes, is_active, created_at"
+    )
     .order("category", { ascending: true })
     .order("name", { ascending: true });
 
   if (restaurantId) query = query.eq("restaurant_id", restaurantId);
   if (q) query = query.ilike("name", `%${q}%`);
+  if (category) query = query.eq("category", category);
 
   const { data, error } = await query;
   if (error) {
@@ -78,8 +115,9 @@ export async function POST(request: Request) {
     price: number | string;
     image_url?: string | null;
     category?: string | null;
-    extras?: string[] | null;
-    excludes?: string[] | null;
+    extras?: OptionInput[] | null;
+    excludes?: OptionInput[] | null;
+    is_active?: boolean;
   };
 
   const restaurantId = (body.restaurant_id ?? "").trim();
@@ -88,10 +126,9 @@ export async function POST(request: Request) {
   const imageUrl = (body.image_url ?? null) || null;
   const category = (body.category ?? null) || null;
   const price = Number(body.price);
-  const cleanArr = (arr?: string[] | null) =>
-    Array.from(new Set((arr ?? []).map((s) => (s ?? "").trim()).filter(Boolean)));
-  const extras = cleanArr(body.extras);
-  const excludes = cleanArr(body.excludes);
+  const extras = normalizeOptions(body.extras);
+  const excludes = normalizeOptions(body.excludes);
+  const isActive = typeof body.is_active === "boolean" ? body.is_active : true;
 
   if (!restaurantId || !name || !Number.isFinite(price) || price < 0) {
     return NextResponse.json(
@@ -112,6 +149,7 @@ export async function POST(request: Request) {
         category,
         extras,
         excludes,
+        is_active: isActive,
       },
     ])
     .select("id")
@@ -147,8 +185,9 @@ export async function PATCH(request: Request) {
     price?: number | string;
     image_url?: string | null;
     category?: string | null;
-    extras?: string[] | null;
-    excludes?: string[] | null;
+    extras?: OptionInput[] | null;
+    excludes?: OptionInput[] | null;
+    is_active?: boolean;
   };
 
   const id = (body.id ?? "").trim();
@@ -161,6 +200,7 @@ export async function PATCH(request: Request) {
   if (body.description !== undefined) update.description = body.description || null;
   if (body.image_url !== undefined) update.image_url = body.image_url || null;
   if (body.category !== undefined) update.category = body.category || null;
+  if (typeof body.is_active === "boolean") update.is_active = body.is_active;
   if (body.price !== undefined) {
     const price = Number(body.price);
     if (!Number.isFinite(price) || price < 0) {
@@ -171,10 +211,8 @@ export async function PATCH(request: Request) {
     }
     update.price = price;
   }
-  const cleanArr = (arr?: string[] | null) =>
-    Array.from(new Set((arr ?? []).map((s) => (s ?? "").trim()).filter(Boolean)));
-  if (body.extras !== undefined) update.extras = cleanArr(body.extras);
-  if (body.excludes !== undefined) update.excludes = cleanArr(body.excludes);
+  if (body.extras !== undefined) update.extras = normalizeOptions(body.extras);
+  if (body.excludes !== undefined) update.excludes = normalizeOptions(body.excludes);
 
   if (Object.keys(update).length === 0) {
     return NextResponse.json({ message: "Nada para actualizar." }, { status: 400 });
@@ -212,6 +250,34 @@ export async function DELETE(request: Request) {
 
   const { error } = await supabaseService.from("products").delete().eq("id", id);
   if (error) {
+    if (error.code === "23503") {
+      const { error: softError } = await supabaseService
+        .from("products")
+        .update({ is_active: false })
+        .eq("id", id);
+      if (!softError) {
+        return NextResponse.json({
+          ok: true,
+          softDeleted: true,
+          message:
+            "No se puede eliminar porque esta asociado a pedidos. Se desactivo el producto y puedes reactivarlo desde la lista.",
+        });
+      }
+      if (softError.code === "42703") {
+        return NextResponse.json(
+          {
+            message:
+              "No se puede eliminar porque esta asociado a pedidos. Ejecuta la migracion para desactivar productos.",
+          },
+          { status: 409 }
+        );
+      }
+      console.error("[admin/products DELETE soft]", softError);
+      return NextResponse.json(
+        { message: "No se pudo desactivar el producto." },
+        { status: 500 }
+      );
+    }
     console.error("[admin/products DELETE]", error);
     return NextResponse.json(
       { message: "No se pudo eliminar el producto." },

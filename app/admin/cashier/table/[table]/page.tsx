@@ -16,6 +16,12 @@ type Session = {
 };
 
 type Modifier = { label: string; type: "remove" | "extra"; price?: number };
+type ModifierRow = {
+  order_item_id: string;
+  label: string;
+  type: "remove" | "extra";
+  price: number | string | null;
+};
 type OrderItem = {
   id: string;
   quantity: number;
@@ -33,6 +39,22 @@ type Order = {
   order_items: OrderItem[];
 };
 
+type OrderItemRow = {
+  id: string;
+  quantity: number | string;
+  price: number | string;
+  note: string | null;
+  products?: { name: string | null } | Array<{ name: string | null }> | null;
+};
+
+type OrderRow = {
+  id: string;
+  status: string;
+  is_paid: boolean;
+  created_at: string;
+  order_items?: OrderItemRow[] | null;
+};
+
 type Payment = {
   id: string;
   method: "cash" | "card";
@@ -48,7 +70,6 @@ export default function CashierTablePage() {
   const tableNumber = decodeURIComponent(params?.table ?? "");
   const router = useRouter();
 
-  const [restaurants, setRestaurants] = useState<Restaurant[]>([]);
   const [restaurantId, setRestaurantId] = useState<string>("");
   const [session, setSession] = useState<Session | null>(null);
   const [orders, setOrders] = useState<Order[]>([]);
@@ -75,7 +96,6 @@ export default function CashierTablePage() {
     const loadRestaurants = async () => {
       const { data } = await client.from("restaurants").select("id,name,slug").order("name");
       const list = (data ?? []) as Restaurant[];
-      setRestaurants(list);
       if (!restaurantId && list.length > 0) setRestaurantId(list[0].id);
     };
     loadRestaurants().catch(() => undefined);
@@ -112,12 +132,13 @@ export default function CashierTablePage() {
         .eq("session_id", session.id)
         .order("created_at");
       if (ordersError) throw ordersError;
-      const normalized: Order[] = (ordersData ?? []).map((o: any) => ({
+      const orderRows = (ordersData ?? []) as OrderRow[];
+      const normalized: Order[] = orderRows.map((o) => ({
         id: o.id,
         status: o.status,
         is_paid: o.is_paid,
         created_at: o.created_at,
-        order_items: (o.order_items ?? []).map((it: any) => ({
+        order_items: (o.order_items ?? []).map((it) => ({
           id: it.id,
           quantity: Number(it.quantity),
           price: Number(it.price),
@@ -134,8 +155,9 @@ export default function CashierTablePage() {
           .select("order_item_id, label, type, price")
           .in("order_item_id", itemIds);
         if (!modsError && modsData) {
+          const modifierRows = modsData as ModifierRow[];
           const modsByItem = new Map<string, Modifier[]>();
-          modsData.forEach((m: any) => {
+          modifierRows.forEach((m) => {
             const list = modsByItem.get(m.order_item_id) ?? [];
             list.push({ label: m.label, type: m.type, price: Number(m.price ?? 0) });
             modsByItem.set(m.order_item_id, list);
